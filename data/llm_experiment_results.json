@@ -1,122 +1,122 @@
 [
   {
     "split":0,
-    "rmse_ols":5.4545009939,
-    "rmse_llm_real":4.2638956733,
-    "rmse_llm_shuffled":7.3307901282
+    "rmse_ols":5.4540038307,
+    "rmse_llm_real":4.2119796684,
+    "rmse_llm_shuffled":17.2877426362
   },
   {
     "split":1,
-    "rmse_ols":4.5540883401,
-    "rmse_llm_real":4.9610102662,
-    "rmse_llm_shuffled":8.6085879462
+    "rmse_ols":4.5574510066,
+    "rmse_llm_real":4.8299830604,
+    "rmse_llm_shuffled":8.7917151083
   },
   {
     "split":2,
-    "rmse_ols":6.5929525362,
-    "rmse_llm_real":5.125784928,
-    "rmse_llm_shuffled":11.3739486134
+    "rmse_ols":6.5922846367,
+    "rmse_llm_real":4.2287382601,
+    "rmse_llm_shuffled":14.6825610845
   },
   {
     "split":3,
-    "rmse_ols":8.8342733569,
-    "rmse_llm_real":6.0681330189,
-    "rmse_llm_shuffled":12.1527035482
+    "rmse_ols":8.8312735011,
+    "rmse_llm_real":5.4527032495,
+    "rmse_llm_shuffled":7.7082600324
   },
   {
     "split":4,
-    "rmse_ols":12.3780550628,
-    "rmse_llm_real":7.6033837236,
-    "rmse_llm_shuffled":10.5821442809
+    "rmse_ols":12.3840029099,
+    "rmse_llm_real":8.4983447586,
+    "rmse_llm_shuffled":11.0404224227
   },
   {
     "split":5,
-    "rmse_ols":10.1235707096,
-    "rmse_llm_real":5.9504502707,
-    "rmse_llm_shuffled":19.649626126
+    "rmse_ols":10.1288500661,
+    "rmse_llm_real":5.2102442797,
+    "rmse_llm_shuffled":11.7458313688
   },
   {
     "split":6,
-    "rmse_ols":10.2030185324,
-    "rmse_llm_real":7.0668079128,
-    "rmse_llm_shuffled":12.9052053198
+    "rmse_ols":10.2115123093,
+    "rmse_llm_real":6.7477073548,
+    "rmse_llm_shuffled":16.3438996126
   },
   {
     "split":7,
-    "rmse_ols":5.413342264,
-    "rmse_llm_real":4.3292045602,
-    "rmse_llm_shuffled":10.9173575561
+    "rmse_ols":5.4110440076,
+    "rmse_llm_real":3.5147209898,
+    "rmse_llm_shuffled":9.7643270028
   },
   {
     "split":8,
-    "rmse_ols":10.2624763042,
-    "rmse_llm_real":5.8853406712,
-    "rmse_llm_shuffled":17.4751278829
+    "rmse_ols":10.274400126,
+    "rmse_llm_real":5.5885019948,
+    "rmse_llm_shuffled":13.0383539117
   },
   {
     "split":9,
-    "rmse_ols":8.1716554714,
-    "rmse_llm_real":4.9968061441,
-    "rmse_llm_shuffled":17.4043215426
+    "rmse_ols":8.1736829861,
+    "rmse_llm_real":3.1281304321,
+    "rmse_llm_shuffled":19.1952958252
   },
   {
     "split":10,
-    "rmse_ols":6.3077652896,
-    "rmse_llm_real":3.9094233193,
-    "rmse_llm_shuffled":5.4448105518
+    "rmse_ols":6.309266009,
+    "rmse_llm_real":4.8696891818,
+    "rmse_llm_shuffled":8.9088138176
   },
   {
     "split":11,
-    "rmse_ols":12.3796462078,
-    "rmse_llm_real":6.6142539285,
-    "rmse_llm_shuffled":13.579641977
+    "rmse_ols":12.3828498697,
+    "rmse_llm_real":5.596373826,
+    "rmse_llm_shuffled":7.6729987027
   },
   {
     "split":12,
-    "rmse_ols":7.9782440742,
-    "rmse_llm_real":8.2940029109,
-    "rmse_llm_shuffled":13.4393798536
+    "rmse_ols":7.9785606601,
+    "rmse_llm_real":7.9762767573,
+    "rmse_llm_shuffled":15.567894994
   },
   {
     "split":13,
-    "rmse_ols":11.8234855892,
-    "rmse_llm_real":7.5373685262,
-    "rmse_llm_shuffled":14.3087623577
+    "rmse_ols":11.824457611,
+    "rmse_llm_real":6.0805591848,
+    "rmse_llm_shuffled":15.4378984674
   },
   {
     "split":14,
-    "rmse_ols":9.4650333274,
-    "rmse_llm_real":3.8906316508,
-    "rmse_llm_shuffled":9.3219674386
+    "rmse_ols":9.4640437597,
+    "rmse_llm_real":5.7168483053,
+    "rmse_llm_shuffled":11.6996087736
   },
   {
     "split":15,
-    "rmse_ols":9.2599714132,
-    "rmse_llm_real":9.5570072123,
-    "rmse_llm_shuffled":8.5131800814
+    "rmse_ols":9.258344905,
+    "rmse_llm_real":8.1114952102,
+    "rmse_llm_shuffled":12.7267120656
   },
   {
     "split":16,
-    "rmse_ols":11.4032893185,
-    "rmse_llm_real":7.5349420755,
-    "rmse_llm_shuffled":9.125976566
+    "rmse_ols":11.4113376437,
+    "rmse_llm_real":8.7478896156,
+    "rmse_llm_shuffled":11.4189869794
   },
   {
     "split":17,
-    "rmse_ols":11.138466785,
-    "rmse_llm_real":8.1743081405,
-    "rmse_llm_shuffled":13.6473257731
+    "rmse_ols":11.1404843321,
+    "rmse_llm_real":6.046811331,
+    "rmse_llm_shuffled":10.6163671667
   },
   {
     "split":18,
-    "rmse_ols":8.6098415064,
-    "rmse_llm_real":5.6532795866,
-    "rmse_llm_shuffled":19.7948363528
+    "rmse_ols":8.6099335563,
+    "rmse_llm_real":5.002834651,
+    "rmse_llm_shuffled":16.0095156363
   },
   {
     "split":19,
-    "rmse_ols":7.187998747,
-    "rmse_llm_real":3.8097927199,
-    "rmse_llm_shuffled":10.5926460601
+    "rmse_ols":7.1880507572,
+    "rmse_llm_real":6.3631581639,
+    "rmse_llm_shuffled":8.4849508489
   }
 ]
