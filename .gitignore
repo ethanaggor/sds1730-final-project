@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+.env
+
+# Quarto intermediates
+final_project_files/
+*.tex
+*.log
+*.aux
+*.fls
+*.fdb_latexmk
+*.xdv
+
+# Jupyter
+.ipynb_checkpoints/
+
+# OS
+.DS_Store
+
+# References (template notebook, not part of submission)
+references/
+
+# Project planning (internal)
+plan.md
+CLAUDE.md
