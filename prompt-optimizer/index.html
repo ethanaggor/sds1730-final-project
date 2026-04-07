@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GEPA Prompt Optimizer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<style>
+  :root {
+    --bg: #000; --surface: #0a0a0a; --surface-raised: #111;
+    --border: rgba(255,255,255,0.08); --border-strong: rgba(255,255,255,0.14);
+    --text: #ededed; --text-secondary: #a1a1a1; --text-muted: #666;
+    --accent: #0070f3; --accent-dim: rgba(0,112,243,0.12);
+    --green: #50e3c2; --green-dim: rgba(80,227,194,0.12);
+    --red: #ee0000; --red-dim: rgba(238,0,0,0.1);
+    --yellow: #f5a623; --yellow-dim: rgba(245,166,35,0.12);
+    --font: "Plus Jakarta Sans", -apple-system, sans-serif;
+    --mono: "JetBrains Mono", "Fira Code", monospace;
+    --radius: 8px; --radius-sm: 6px;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: var(--font); background: var(--bg); color: var(--text); overflow: hidden; }
+
+  /* Header */
+  header {
+    display: flex; align-items: center; gap: 32px; padding: 0 24px;
+    height: 52px; border-bottom: 1px solid var(--border);
+  }
+  .logo { font-size: 13px; font-weight: 700; letter-spacing: -0.3px; white-space: nowrap; }
+  .logo span { color: var(--text-muted); font-weight: 400; margin-left: 6px; }
+  .header-stats { display: flex; gap: 24px; margin-left: auto; }
+  .stat { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+  .stat-label { color: var(--text-muted); font-size: 11px; }
+  .stat-value { font-family: var(--mono); font-size: 12px; color: var(--text-secondary); }
+
+  .badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 4px 10px; border-radius: 100px; font-size: 11px; font-weight: 600;
+    letter-spacing: 0.02em;
+  }
+  .badge-idle { background: rgba(255,255,255,0.06); color: var(--text-muted); }
+  .badge-running { background: var(--yellow-dim); color: var(--yellow); }
+  .badge-running::before {
+    content: ""; width: 6px; height: 6px; border-radius: 50%;
+    background: var(--yellow); animation: pulse 1.5s ease infinite;
+  }
+  .badge-complete { background: var(--green-dim); color: var(--green); }
+
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+  /* Layout */
+  .layout { display: grid; grid-template-columns: 260px 1fr 360px; height: calc(100vh - 52px); }
+
+  .panel {
+    border-right: 1px solid var(--border); overflow-y: auto; padding: 16px;
+    scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.1) transparent;
+  }
+  .panel:last-child { border-right: none; }
+  .panel-header {
+    font-size: 11px; font-weight: 600; color: var(--text-muted);
+    text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 12px;
+  }
+
+  /* Candidates panel */
+  .candidate {
+    padding: 10px 12px; margin-bottom: 4px; border-radius: var(--radius-sm);
+    border: 1px solid transparent; cursor: pointer; transition: all 0.15s ease;
+  }
+  .candidate:hover { background: rgba(255,255,255,0.03); border-color: var(--border); }
+  .candidate.selected { background: var(--accent-dim); border-color: rgba(0,112,243,0.3); }
+  .candidate.best { border-color: rgba(80,227,194,0.3); }
+  .candidate-row { display: flex; justify-content: space-between; align-items: center; }
+  .candidate-idx { font-family: var(--mono); font-size: 12px; font-weight: 500; }
+  .candidate-score {
+    font-family: var(--mono); font-size: 11px; padding: 2px 8px;
+    border-radius: 100px; background: var(--green-dim); color: var(--green);
+  }
+  .candidate-preview {
+    font-size: 11px; color: var(--text-muted); margin-top: 4px; line-height: 1.4;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  }
+  .candidate-meta { font-size: 10px; color: var(--text-muted); margin-top: 4px; font-family: var(--mono); }
+
+  /* Center panel */
+  .center-empty {
+    display: flex; align-items: center; justify-content: center; height: 100%;
+    color: var(--text-muted); font-size: 13px;
+  }
+  .detail-header {
+    display: flex; align-items: center; gap: 12px; margin-bottom: 16px;
+    padding-bottom: 12px; border-bottom: 1px solid var(--border);
+  }
+  .detail-title { font-size: 13px; font-weight: 600; }
+  .detail-meta {
+    display: flex; gap: 16px; font-family: var(--mono); font-size: 11px; color: var(--text-secondary);
+  }
+
+  /* Instruction view */
+  .instruction-block {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 16px; font-size: 13px; line-height: 1.7; white-space: pre-wrap;
+    max-height: calc(100vh - 160px); overflow-y: auto; font-family: var(--mono);
+    color: var(--text-secondary);
+  }
+
+  /* Trajectory view */
+  .traj-header {
+    display: flex; align-items: center; gap: 16px; margin-bottom: 20px;
+    padding-bottom: 12px; border-bottom: 1px solid var(--border);
+  }
+  .traj-badge {
+    font-family: var(--mono); font-size: 12px; padding: 4px 10px;
+    border-radius: var(--radius-sm); background: var(--surface-raised);
+    border: 1px solid var(--border);
+  }
+
+  .iteration { margin-bottom: 24px; animation: fadeIn 0.2s ease; }
+  .iteration-label {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-size: 11px; font-weight: 600; color: var(--text-muted);
+    text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 10px;
+  }
+  .iteration-label::before {
+    content: ""; display: inline-block; width: 8px; height: 8px;
+    border-radius: 50%; border: 2px solid var(--accent); flex-shrink: 0;
+  }
+
+  .reasoning-block {
+    padding: 12px 16px; margin-bottom: 8px; border-radius: var(--radius-sm);
+    background: var(--surface); border-left: 2px solid var(--accent);
+    font-size: 13px; line-height: 1.6; color: var(--text-secondary);
+  }
+
+  .code-block {
+    padding: 12px 16px; margin-bottom: 8px; border-radius: var(--radius-sm);
+    background: var(--surface-raised); border: 1px solid var(--border);
+    font-family: var(--mono); font-size: 12px; line-height: 1.6;
+    white-space: pre-wrap; overflow-x: auto; color: var(--text);
+  }
+  .code-label {
+    font-size: 10px; color: var(--text-muted); text-transform: uppercase;
+    letter-spacing: 0.05em; margin-bottom: 6px; font-family: var(--font);
+  }
+
+  .output-block {
+    padding: 12px 16px; border-radius: var(--radius-sm);
+    background: rgba(255,255,255,0.02); border: 1px solid var(--border);
+    font-family: var(--mono); font-size: 11px; line-height: 1.5;
+    white-space: pre-wrap; overflow-x: auto; color: var(--text-muted);
+    max-height: 200px; overflow-y: auto;
+  }
+
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+  /* Performance chart */
+  #perf-chart { width: 100%; height: 140px; margin-bottom: 20px; }
+  #perf-chart svg { width: 100%; height: 100%; }
+
+  /* Event log */
+  .event {
+    padding: 10px 0; border-bottom: 1px solid var(--border); font-size: 12px;
+    cursor: pointer; transition: background 0.1s ease;
+  }
+  .event:hover { background: rgba(255,255,255,0.02); margin: 0 -16px; padding: 10px 16px; }
+  .event-row { display: flex; align-items: center; gap: 8px; }
+  .event-time { font-family: var(--mono); font-size: 10px; color: var(--text-muted); min-width: 64px; }
+  .event-type {
+    font-size: 10px; font-weight: 600; padding: 2px 6px;
+    border-radius: 4px; text-transform: uppercase; letter-spacing: 0.04em;
+  }
+  .event-type.eval { background: var(--accent-dim); color: var(--accent); }
+  .event-type.candidate { background: rgba(255,255,255,0.06); color: var(--text-secondary); }
+  .event-type.optimization_start { background: var(--yellow-dim); color: var(--yellow); }
+  .event-type.optimization_complete { background: var(--green-dim); color: var(--green); }
+  .event-body { color: var(--text-secondary); margin-top: 4px; font-family: var(--mono); font-size: 11px; }
+  .event.selected { background: var(--accent-dim); margin: 0 -16px; padding: 10px 16px; border-radius: var(--radius-sm); }
+
+  .empty-state {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    padding: 48px 24px; color: var(--text-muted); font-size: 13px; text-align: center;
+    gap: 8px;
+  }
+  .empty-state-icon { font-size: 24px; opacity: 0.3; margin-bottom: 4px; }
+
+  /* Predictions table */
+  .pred-table { width: 100%; border-collapse: collapse; margin-top: 16px; font-family: var(--mono); font-size: 11px; }
+  .pred-table th {
+    text-align: left; padding: 6px 8px; color: var(--text-muted);
+    border-bottom: 1px solid var(--border-strong); font-size: 10px;
+    text-transform: uppercase; letter-spacing: 0.04em; font-family: var(--font);
+  }
+  .pred-table td { padding: 6px 8px; border-bottom: 1px solid var(--border); }
+  .pred-table .pos { color: var(--green); }
+  .pred-table .neg { color: var(--red); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">GEPA<span>Prompt Optimizer</span></div>
+  <span id="status" class="badge badge-idle">Idle</span>
+  <div class="header-stats">
+    <div class="stat"><span class="stat-label">Student</span><span class="stat-value" id="student-model">--</span></div>
+    <div class="stat"><span class="stat-label">Teacher</span><span class="stat-value" id="teacher-model">--</span></div>
+    <div class="stat"><span class="stat-label">Sub-LM</span><span class="stat-value" id="sub-model">--</span></div>
+    <div class="stat"><span class="stat-label">Cost</span><span class="stat-value" id="total-cost">--</span></div>
+    <div class="stat"><span class="stat-label">I/O</span><span class="stat-value" id="io-totals">--</span></div>
+    <div class="stat"><span class="stat-label">Elapsed</span><span class="stat-value" id="elapsed">--</span></div>
+  </div>
+</header>
+
+<div class="layout">
+  <div class="panel" id="candidates-panel">
+    <div class="panel-header">Candidates</div>
+    <div id="candidates-list">
+      <div class="empty-state"><div class="empty-state-icon">&#9671;</div>Candidates appear after optimization</div>
+    </div>
+  </div>
+
+  <div class="panel" id="detail-panel">
+    <div id="detail-content">
+      <div class="center-empty">Select a candidate or evaluation</div>
+    </div>
+  </div>
+
+  <div class="panel" id="feed-panel">
+    <div class="panel-header">Performance</div>
+    <div id="perf-chart"></div>
+    <div class="panel-header">Event Log</div>
+    <div id="event-log">
+      <div class="empty-state"><div class="empty-state-icon">&#9676;</div>Waiting for events</div>
+    </div>
+  </div>
+</div>
+
+<script>
+const S = { events: [], manifest: null, candidates: [], selectedCandidate: null, selectedEval: null };
+
+function fmt(n, d = 2) { return n != null ? Number(n).toFixed(d) : "--"; }
+function fmtK(n) { return n != null ? n >= 1000 ? (n / 1000).toFixed(1) + "k" : String(n) : "--"; }
+function shortModel(m) { return m ? m.replace("gemini/gemini-", "").replace("openai/", "").replace("-preview", "") : "--"; }
+function escHtml(s) { const d = document.createElement("div"); d.textContent = s; return d.innerHTML; }
+
+function updateHeader() {
+  const start = S.events.find(e => e.type === "optimization_start");
+  const end = S.events.find(e => e.type === "optimization_complete");
+  const el = document.getElementById("status");
+
+  if (end) {
+    el.className = "badge badge-complete"; el.textContent = "Complete";
+    document.getElementById("elapsed").textContent = fmt(end.elapsed_seconds, 0) + "s";
+  } else if (start) {
+    el.className = "badge badge-running"; el.textContent = "Running";
+  }
+
+  if (start) {
+    document.getElementById("student-model").textContent = shortModel(start.student_model) + (start.student_reasoning ? ` (${start.student_reasoning})` : "");
+    document.getElementById("teacher-model").textContent = shortModel(start.teacher_model) + (start.teacher_reasoning ? ` (${start.teacher_reasoning})` : "");
+    document.getElementById("sub-model").textContent = shortModel(start.sub_model) + (start.sub_reasoning ? ` (${start.sub_reasoning})` : "");
+  }
+
+  const cost = S.manifest?.total_cost_usd ?? (end?.total_cost_usd ?? null);
+  document.getElementById("total-cost").textContent = cost != null ? "$" + fmt(cost, 2) : "--";
+  const elapsed = S.manifest?.elapsed_seconds ?? end?.elapsed_seconds;
+  if (elapsed) document.getElementById("elapsed").textContent = fmt(elapsed, 0) + "s";
+
+  // I/O breakdown from manifest or completion event
+  const m = S.manifest;
+  const ioEl = document.getElementById("io-totals");
+  if (m?.student?.input_tokens != null) {
+    const s = m.student, t = m.teacher, sub = m.sub;
+    ioEl.textContent = `R:${fmtK(s.input_tokens)}/${fmtK(s.output_tokens)} T:${fmtK(t.input_tokens)}/${fmtK(t.output_tokens)} S:${fmtK(sub.input_tokens)}/${fmtK(sub.output_tokens)}`;
+  } else if (end?.student?.input_tokens != null) {
+    const s = end.student, t = end.teacher, sub = end.sub;
+    ioEl.textContent = `R:${fmtK(s.input_tokens)}/${fmtK(s.output_tokens)} T:${fmtK(t.input_tokens)}/${fmtK(t.output_tokens)} S:${fmtK(sub.input_tokens)}/${fmtK(sub.output_tokens)}`;
+  }
+}
+
+function renderCandidates() {
+  const cands = S.events.filter(e => e.type === "candidate").sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
+  S.candidates = cands;
+  const container = document.getElementById("candidates-list");
+  if (!cands.length) return;
+
+  const bestScore = cands[0]?.score;
+  container.innerHTML = cands.map((c, i) => {
+    const isBest = c.score === bestScore;
+    const sel = S.selectedCandidate === c.idx ? "selected" : "";
+    const best = isBest ? "best" : "";
+    return `<div class="candidate ${sel} ${best}" data-idx="${c.idx}" onclick="selectCandidate(${c.idx})">
+      <div class="candidate-row">
+        <span class="candidate-idx">${isBest ? "&#9733; " : ""}#${c.idx}</span>
+        <span class="candidate-score">${fmt(c.score, 4)}</span>
+      </div>
+      <div class="candidate-preview">${escHtml((c.instruction || "").slice(0, 120))}</div>
+      <div class="candidate-meta">${c.parents ? "from #" + c.parents.join(", #") : "seed"} &middot; ${c.eval_count_at_discovery ?? "?"} evals</div>
+    </div>`;
+  }).join("");
+}
+
+function selectCandidate(idx) {
+  S.selectedCandidate = idx;
+  S.selectedEval = null;
+  renderCandidates();
+  renderEventLog();
+
+  const cand = S.events.find(e => e.type === "candidate" && e.idx === idx);
+  if (!cand) return;
+
+  const container = document.getElementById("detail-content");
+  container.innerHTML = `
+    <div class="detail-header">
+      <div class="detail-title">Candidate #${idx}</div>
+      <div class="detail-meta">
+        <span>Score: ${fmt(cand.score, 4)}</span>
+        <span>Lineage: ${cand.parents ? "#" + cand.parents.join(", #") : "seed"}</span>
+      </div>
+    </div>
+    <div class="instruction-block">${escHtml(cand.instruction || "(empty)")}</div>
+  `;
+}
+
+function selectEval(eventIdx) {
+  S.selectedEval = eventIdx;
+  S.selectedCandidate = null;
+  renderCandidates();
+  renderEventLog();
+
+  const ev = S.events[eventIdx];
+  if (!ev || !ev.trajectory) return;
+
+  const container = document.getElementById("detail-content");
+  let html = `<div class="traj-header">
+    <div class="detail-title">Split ${ev.split ?? "?"}</div>
+    <div class="traj-badge">RMSE ${fmt(ev.rmse)}</div>
+    <div class="traj-badge">Score ${fmt(ev.score, 4)}</div>
+    <div class="traj-badge">${ev.n_iterations ?? ev.trajectory.length} iterations</div>
+  </div>`;
+
+  if (ev.instruction_preview) {
+    html += `<div style="margin-bottom:16px">
+      <div class="code-label">Candidate instruction (${ev.pred_name || "predictor"})</div>
+      <div class="instruction-block" style="max-height:160px;font-size:11px">${escHtml(ev.instruction_preview)}</div>
+    </div>`;
+  }
+
+  ev.trajectory.forEach((t, i) => {
+    html += `<div class="iteration">
+      <div class="iteration-label">Step ${i + 1}</div>`;
+
+    if (t.reasoning) {
+      html += `<div class="reasoning-block">${escHtml(t.reasoning)}</div>`;
+    }
+    if (t.code) {
+      html += `<div><div class="code-label">Code</div><div class="code-block">${escHtml(t.code)}</div></div>`;
+    }
+    if (t.output) {
+      html += `<div><div class="code-label">Output</div><div class="output-block">${escHtml(t.output)}</div></div>`;
+    }
+    html += `</div>`;
+  });
+
+  container.innerHTML = html;
+}
+
+function renderEventLog() {
+  const container = document.getElementById("event-log");
+  const visible = S.events.filter(e => e.type !== "candidate");
+  if (!visible.length) return;
+
+  container.innerHTML = visible.slice().reverse().slice(0, 200).map(ev => {
+    const origIdx = S.events.indexOf(ev);
+    const time = ev.ts ? new Date(ev.ts).toLocaleTimeString() : "";
+    const sel = S.selectedEval === origIdx ? "selected" : "";
+    let body = "";
+    let clickAttr = "";
+
+    if (ev.type === "eval") {
+      body = `Split ${ev.split ?? "?"}: RMSE ${fmt(ev.rmse)} &middot; Score ${fmt(ev.score, 4)} &middot; ${ev.n_iterations ?? "?"} iters`;
+      if (ev.instruction_preview) body += ` &middot; <span style="color:var(--yellow)">prompt</span>`;
+      clickAttr = `onclick="selectEval(${origIdx})"`;
+    } else if (ev.type === "optimization_complete") {
+      const parts = [`Finished in ${fmt(ev.elapsed_seconds, 0)}s`, `$${fmt(ev.total_cost_usd, 2)}`];
+      if (ev.student) parts.push(`root: ${fmtK(ev.student.input_tokens)}in/${fmtK(ev.student.output_tokens)}out`);
+      if (ev.sub) parts.push(`sub: ${fmtK(ev.sub.input_tokens)}in/${fmtK(ev.sub.output_tokens)}out`);
+      body = parts.join(" &middot; ");
+    } else if (ev.type === "optimization_start") {
+      body = `${ev.n_examples} examples`;
+    }
+
+    return `<div class="event ${sel}" ${clickAttr}>
+      <div class="event-row">
+        <span class="event-time">${time}</span>
+        <span class="event-type ${ev.type}">${ev.type.replace("_", " ")}</span>
+      </div>
+      ${body ? `<div class="event-body">${body}</div>` : ""}
+    </div>`;
+  }).join("");
+}
+
+function renderChart() {
+  const evals = S.events.filter(e => e.type === "eval" && e.score != null);
+  if (!evals.length) return;
+
+  const container = document.getElementById("perf-chart");
+  container.innerHTML = "";
+
+  const margin = { top: 8, right: 12, bottom: 24, left: 44 };
+  const width = container.clientWidth - margin.left - margin.right;
+  const height = 130 - margin.top - margin.bottom;
+
+  const svg = d3.select(container).append("svg")
+    .attr("viewBox", `0 0 ${width + margin.left + margin.right} ${height + margin.top + margin.bottom}`)
+    .append("g").attr("transform", `translate(${margin.left},${margin.top})`);
+
+  const x = d3.scaleLinear().domain([0, Math.max(1, evals.length - 1)]).range([0, width]);
+  const yMax = d3.max(evals, d => d.score) * 1.05;
+  const y = d3.scaleLinear().domain([0, yMax]).range([height, 0]);
+
+  // Grid lines
+  svg.selectAll(".grid-line")
+    .data(y.ticks(4)).enter().append("line")
+    .attr("x1", 0).attr("x2", width).attr("y1", d => y(d)).attr("y2", d => y(d))
+    .attr("stroke", "rgba(255,255,255,0.04)");
+
+  svg.append("g").attr("transform", `translate(0,${height})`).call(d3.axisBottom(x).ticks(Math.min(evals.length, 8)).tickFormat(d3.format("d")))
+    .call(g => g.select(".domain").attr("stroke", "rgba(255,255,255,0.08)"))
+    .call(g => g.selectAll(".tick line").attr("stroke", "rgba(255,255,255,0.04)"))
+    .call(g => g.selectAll(".tick text").attr("fill", "#666").style("font-family", "var(--mono)").style("font-size", "10px"));
+
+  svg.append("g").call(d3.axisLeft(y).ticks(4).tickFormat(d3.format(".3f")))
+    .call(g => g.select(".domain").remove())
+    .call(g => g.selectAll(".tick line").remove())
+    .call(g => g.selectAll(".tick text").attr("fill", "#666").style("font-family", "var(--mono)").style("font-size", "10px"));
+
+  // Gradient fill
+  const gradientId = "area-grad";
+  const defs = svg.append("defs");
+  const gradient = defs.append("linearGradient").attr("id", gradientId).attr("x1", 0).attr("x2", 0).attr("y1", 0).attr("y2", 1);
+  gradient.append("stop").attr("offset", "0%").attr("stop-color", "#0070f3").attr("stop-opacity", 0.15);
+  gradient.append("stop").attr("offset", "100%").attr("stop-color", "#0070f3").attr("stop-opacity", 0);
+
+  const area = d3.area().x((_, i) => x(i)).y0(height).y1(d => y(d.score)).curve(d3.curveMonotoneX);
+  svg.append("path").datum(evals).attr("fill", `url(#${gradientId})`).attr("d", area);
+
+  const line = d3.line().x((_, i) => x(i)).y(d => y(d.score)).curve(d3.curveMonotoneX);
+  svg.append("path").datum(evals).attr("fill", "none").attr("stroke", "#0070f3").attr("stroke-width", 1.5).attr("d", line);
+
+  svg.selectAll(".dot").data(evals).enter().append("circle")
+    .attr("cx", (_, i) => x(i)).attr("cy", d => y(d.score)).attr("r", 2.5)
+    .attr("fill", "#0070f3").attr("stroke", "#000").attr("stroke-width", 1);
+}
+
+function render() {
+  updateHeader();
+  renderCandidates();
+  renderEventLog();
+  renderChart();
+}
+
+async function fetchData() {
+  try {
+    const [events, manifest] = await Promise.all([
+      fetch("/api/events").then(r => r.json()),
+      fetch("/api/manifest").then(r => r.ok ? r.json() : null),
+    ]);
+    S.events = events;
+    S.manifest = manifest;
+    render();
+  } catch (e) {
+    console.error("Fetch failed:", e);
+  }
+}
+
+function connectSSE() {
+  const source = new EventSource("/api/stream");
+  source.onmessage = (msg) => {
+    try {
+      const ev = JSON.parse(msg.data);
+      if (ev.type === "connected") return;
+      if (ev.type === "manifest") { S.manifest = ev; }
+      else { S.events.push(ev); }
+      render();
+    } catch {}
+  };
+  source.onerror = () => { source.close(); setTimeout(connectSSE, 3000); };
+}
+
+fetchData();
+connectSSE();
+setInterval(fetchData, 15000);
+</script>
+</body>
+</html>
