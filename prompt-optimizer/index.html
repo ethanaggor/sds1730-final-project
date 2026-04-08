@@ -6,13 +6,17 @@
 <title>GEPA Prompt Optimizer</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">
 <script src="https://d3js.org/d3.v7.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/marked@15/marked.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-python.min.js"></script>
 <style>
   :root {
     --bg: #000; --surface: #0a0a0a; --surface-raised: #111;
     --border: rgba(255,255,255,0.08); --border-strong: rgba(255,255,255,0.14);
     --text: #ededed; --text-secondary: #a1a1a1; --text-muted: #666;
-    --accent: #0070f3; --accent-dim: rgba(0,112,243,0.12);
+    --accent: #50e3c2; --accent-dim: rgba(80,227,194,0.12);
     --green: #50e3c2; --green-dim: rgba(80,227,194,0.12);
     --red: #ee0000; --red-dim: rgba(238,0,0,0.1);
     --yellow: #f5a623; --yellow-dim: rgba(245,166,35,0.12);
@@ -24,13 +28,22 @@
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { font-family: var(--font); background: var(--bg); color: var(--text); overflow: hidden; }
 
-  /* Header */
   header {
-    display: flex; align-items: center; gap: 32px; padding: 0 24px;
+    display: flex; align-items: center; gap: 20px; padding: 0 24px;
     height: 52px; border-bottom: 1px solid var(--border);
   }
   .logo { font-size: 13px; font-weight: 700; letter-spacing: -0.3px; white-space: nowrap; }
   .logo span { color: var(--text-muted); font-weight: 400; margin-left: 6px; }
+
+  #run-select {
+    font-family: var(--mono); font-size: 11px; padding: 4px 8px;
+    background: var(--surface-raised); color: var(--text-secondary);
+    border: 1px solid var(--border); border-radius: var(--radius-sm);
+    cursor: pointer; outline: none;
+  }
+  #run-select:hover { border-color: var(--border-strong); }
+  #run-select option { background: var(--surface); color: var(--text); }
+
   .header-stats { display: flex; gap: 24px; margin-left: auto; }
   .stat { display: flex; align-items: center; gap: 8px; font-size: 12px; }
   .stat-label { color: var(--text-muted); font-size: 11px; }
@@ -51,7 +64,6 @@
 
   @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
 
-  /* Layout */
   .layout { display: grid; grid-template-columns: 260px 1fr 360px; height: calc(100vh - 52px); }
 
   .panel {
@@ -64,13 +76,12 @@
     text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 12px;
   }
 
-  /* Candidates panel */
   .candidate {
     padding: 10px 12px; margin-bottom: 4px; border-radius: var(--radius-sm);
     border: 1px solid transparent; cursor: pointer; transition: all 0.15s ease;
   }
   .candidate:hover { background: rgba(255,255,255,0.03); border-color: var(--border); }
-  .candidate.selected { background: var(--accent-dim); border-color: rgba(0,112,243,0.3); }
+  .candidate.selected { background: var(--accent-dim); border-color: rgba(80,227,194,0.3); }
   .candidate.best { border-color: rgba(80,227,194,0.3); }
   .candidate-row { display: flex; justify-content: space-between; align-items: center; }
   .candidate-idx { font-family: var(--mono); font-size: 12px; font-weight: 500; }
@@ -84,7 +95,6 @@
   }
   .candidate-meta { font-size: 10px; color: var(--text-muted); margin-top: 4px; font-family: var(--mono); }
 
-  /* Center panel */
   .center-empty {
     display: flex; align-items: center; justify-content: center; height: 100%;
     color: var(--text-muted); font-size: 13px;
@@ -98,7 +108,6 @@
     display: flex; gap: 16px; font-family: var(--mono); font-size: 11px; color: var(--text-secondary);
   }
 
-  /* Instruction view */
   .instruction-block {
     background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
     padding: 16px; font-size: 13px; line-height: 1.7; white-space: pre-wrap;
@@ -106,7 +115,6 @@
     color: var(--text-secondary);
   }
 
-  /* Trajectory view */
   .traj-header {
     display: flex; align-items: center; gap: 16px; margin-bottom: 20px;
     padding-bottom: 12px; border-bottom: 1px solid var(--border);
@@ -133,12 +141,45 @@
     background: var(--surface); border-left: 2px solid var(--accent);
     font-size: 13px; line-height: 1.6; color: var(--text-secondary);
   }
+  .reasoning-block h1, .reasoning-block h2, .reasoning-block h3, .reasoning-block h4 {
+    font-size: 12px; font-weight: 600; color: var(--text);
+    margin: 12px 0 6px; letter-spacing: 0.02em;
+  }
+  .reasoning-block h1:first-child, .reasoning-block h2:first-child, .reasoning-block h3:first-child {
+    margin-top: 0;
+  }
+  .reasoning-block ul, .reasoning-block ol { padding-left: 20px; margin: 6px 0; }
+  .reasoning-block li { margin: 2px 0; }
+  .reasoning-block table { width: 100%; border-collapse: collapse; margin: 8px 0; font-size: 11px; font-family: var(--mono); }
+  .reasoning-block th, .reasoning-block td {
+    padding: 4px 8px; border-bottom: 1px solid var(--border); text-align: left;
+  }
+  .reasoning-block th { color: var(--text-muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; font-family: var(--font); }
+  .reasoning-block strong { color: var(--text); }
+  .reasoning-block em { color: var(--text-secondary); font-style: italic; }
+  .reasoning-block code {
+    font-family: var(--mono); background: rgba(255,255,255,0.06);
+    padding: 1px 4px; border-radius: 3px; font-size: 0.9em;
+  }
+  .reasoning-block p { margin: 6px 0; }
+  .reasoning-block p:first-child { margin-top: 0; }
+  .reasoning-block p:last-child { margin-bottom: 0; }
+  .reasoning-block blockquote {
+    border-left: 2px solid var(--border-strong); padding-left: 12px;
+    margin: 8px 0; color: var(--text-muted);
+  }
 
   .code-block {
-    padding: 12px 16px; margin-bottom: 8px; border-radius: var(--radius-sm);
-    background: var(--surface-raised); border: 1px solid var(--border);
-    font-family: var(--mono); font-size: 12px; line-height: 1.6;
-    white-space: pre-wrap; overflow-x: auto; color: var(--text);
+    margin-bottom: 8px; border-radius: var(--radius-sm);
+    border: 1px solid var(--border); overflow-x: auto;
+  }
+  .code-block pre[class*="language-"] {
+    background: var(--surface-raised) !important;
+    margin: 0; padding: 12px 16px; border-radius: var(--radius-sm);
+    font-size: 12px; line-height: 1.6;
+  }
+  .code-block code[class*="language-"] {
+    font-family: var(--mono); font-size: 12px;
   }
   .code-label {
     font-size: 10px; color: var(--text-muted); text-transform: uppercase;
@@ -149,17 +190,78 @@
     padding: 12px 16px; border-radius: var(--radius-sm);
     background: rgba(255,255,255,0.02); border: 1px solid var(--border);
     font-family: var(--mono); font-size: 11px; line-height: 1.5;
-    white-space: pre-wrap; overflow-x: auto; color: var(--text-muted);
-    max-height: 200px; overflow-y: auto;
+    color: var(--text-muted); max-height: 200px; overflow-y: auto;
   }
+  .output-block pre { white-space: pre-wrap; margin: 0; font-family: inherit; font-size: inherit; }
+  .output-block table { width: 100%; border-collapse: collapse; margin: 4px 0; }
+  .output-block th, .output-block td {
+    padding: 2px 6px; border-bottom: 1px solid var(--border); text-align: left; font-size: 11px;
+  }
+  .output-block th { color: var(--text-muted); font-size: 10px; }
+  .output-block p { margin: 4px 0; }
+  .output-block h1, .output-block h2, .output-block h3 {
+    font-size: 11px; font-weight: 600; color: var(--text-secondary); margin: 8px 0 4px;
+  }
+  .output-block strong { color: var(--text-secondary); }
 
   @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 
-  /* Performance chart */
   #perf-chart { width: 100%; height: 140px; margin-bottom: 20px; }
   #perf-chart svg { width: 100%; height: 100%; }
 
-  /* Event log */
+  .phase-progress {
+    display: flex; align-items: center; gap: 10px; padding: 10px 0;
+    margin-bottom: 8px; border-bottom: 1px solid var(--border-strong);
+  }
+  .phase-label {
+    font-size: 11px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.06em; white-space: nowrap;
+  }
+  .phase-label.baseline { color: #8b9dc3; }
+  .phase-label.optimizing { color: var(--yellow); }
+  .phase-label.complete { color: var(--green); }
+  .phase-bar {
+    flex: 1; height: 3px; background: rgba(255,255,255,0.06);
+    border-radius: 2px; overflow: hidden;
+  }
+  .phase-bar-fill { height: 100%; border-radius: 2px; transition: width 0.4s ease; }
+  .phase-bar-fill.baseline { background: #8b9dc3; }
+  .phase-bar-fill.optimizing { background: var(--yellow); }
+  .phase-bar-fill.complete { background: var(--green); }
+  .phase-count {
+    font-family: var(--mono); font-size: 10px; color: var(--text-muted); white-space: nowrap;
+  }
+
+  .phase-banner {
+    margin: 4px -16px; padding: 6px 16px;
+    font-size: 10px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.08em; display: flex; align-items: center; gap: 8px;
+  }
+  .phase-banner.baseline {
+    background: rgba(139,157,195,0.08); color: #8b9dc3;
+    border-top: 1px solid rgba(139,157,195,0.2); border-bottom: 1px solid rgba(139,157,195,0.2);
+  }
+  .phase-banner.optimizing {
+    background: var(--yellow-dim); color: var(--yellow);
+    border-top: 1px solid rgba(245,166,35,0.25); border-bottom: 1px solid rgba(245,166,35,0.25);
+  }
+  .phase-banner::before {
+    content: ""; display: inline-block; width: 6px; height: 6px;
+    border-radius: 50%; background: currentColor; flex-shrink: 0;
+  }
+
+  .iter-separator {
+    margin: 2px -16px; padding: 5px 16px;
+    font-size: 10px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.06em; color: #8b7355;
+    border-top: 1px dashed rgba(139,115,85,0.3);
+    display: flex; align-items: center; gap: 6px;
+  }
+  .iter-separator::before {
+    content: ""; display: inline-block; width: 4px; height: 4px;
+    border-radius: 50%; background: #8b7355; flex-shrink: 0;
+  }
+
   .event {
     padding: 10px 0; border-bottom: 1px solid var(--border); font-size: 12px;
     cursor: pointer; transition: background 0.1s ease;
@@ -171,11 +273,15 @@
     font-size: 10px; font-weight: 600; padding: 2px 6px;
     border-radius: 4px; text-transform: uppercase; letter-spacing: 0.04em;
   }
-  .event-type.eval { background: var(--accent-dim); color: var(--accent); }
+  .event-type.eval-baseline { background: rgba(139,157,195,0.12); color: #8b9dc3; }
+  .event-type.eval-mutation { background: var(--yellow-dim); color: var(--yellow); }
   .event-type.candidate { background: rgba(255,255,255,0.06); color: var(--text-secondary); }
   .event-type.optimization_start { background: var(--yellow-dim); color: var(--yellow); }
   .event-type.optimization_complete { background: var(--green-dim); color: var(--green); }
+  .event-type.phase { background: rgba(255,255,255,0.06); color: var(--text-secondary); }
   .event-body { color: var(--text-secondary); margin-top: 4px; font-family: var(--mono); font-size: 11px; }
+  .event-body.baseline { color: #7a8baa; }
+  .event-body.mutation { color: #c9a04e; }
   .event.selected { background: var(--accent-dim); margin: 0 -16px; padding: 10px 16px; border-radius: var(--radius-sm); }
 
   .empty-state {
@@ -185,7 +291,6 @@
   }
   .empty-state-icon { font-size: 24px; opacity: 0.3; margin-bottom: 4px; }
 
-  /* Predictions table */
   .pred-table { width: 100%; border-collapse: collapse; margin-top: 16px; font-family: var(--mono); font-size: 11px; }
   .pred-table th {
     text-align: left; padding: 6px 8px; color: var(--text-muted);
@@ -202,6 +307,7 @@
 <header>
   <div class="logo">GEPA<span>Prompt Optimizer</span></div>
   <span id="status" class="badge badge-idle">Idle</span>
+  <select id="run-select" onchange="switchRun(this.value)"></select>
   <div class="header-stats">
     <div class="stat"><span class="stat-label">Student</span><span class="stat-value" id="student-model">--</span></div>
     <div class="stat"><span class="stat-label">Teacher</span><span class="stat-value" id="teacher-model">--</span></div>
@@ -230,6 +336,7 @@
     <div class="panel-header">Performance</div>
     <div id="perf-chart"></div>
     <div class="panel-header">Event Log</div>
+    <div id="phase-indicator"></div>
     <div id="event-log">
       <div class="empty-state"><div class="empty-state-icon">&#9676;</div>Waiting for events</div>
     </div>
@@ -237,12 +344,80 @@
 </div>
 
 <script>
-const S = { events: [], manifest: null, candidates: [], selectedCandidate: null, selectedEval: null };
+const S = {
+  events: [], manifest: null, candidates: [],
+  selectedCandidate: null, selectedEval: null,
+  runs: [], currentRun: null, userSelectedRun: false,
+  elapsedTimer: null, stalenessTimer: null, lastEventTs: 0,
+};
+
+function getHashRun() {
+  const m = location.hash.match(/run=([^&]+)/);
+  return m ? m[1] : null;
+}
+
+function setHashRun(id) {
+  history.replaceState(null, "", `#run=${id}`);
+}
+
+marked.setOptions({ breaks: true, gfm: true });
 
 function fmt(n, d = 2) { return n != null ? Number(n).toFixed(d) : "--"; }
 function fmtK(n) { return n != null ? n >= 1000 ? (n / 1000).toFixed(1) + "k" : String(n) : "--"; }
 function shortModel(m) { return m ? m.replace("gemini/gemini-", "").replace("openai/", "").replace("-preview", "") : "--"; }
 function escHtml(s) { const d = document.createElement("div"); d.textContent = s; return d.innerHTML; }
+
+function fmtElapsed(seconds) {
+  if (seconds < 60) return Math.floor(seconds) + "s";
+  const m = Math.floor(seconds / 60);
+  const s = Math.floor(seconds % 60);
+  return m + "m " + s + "s";
+}
+
+function renderMarkdown(text) {
+  if (!text) return "";
+  return marked.parse(text);
+}
+
+function renderOutput(text) {
+  if (!text) return "";
+  const hasMarkdown = /^#{1,4}\s|^\|.*\|.*\|/m.test(text);
+  if (hasMarkdown) return '<div>' + marked.parse(text) + '</div>';
+  return '<pre>' + escHtml(text) + '</pre>';
+}
+
+function startElapsedTimer() {
+  stopElapsedTimer();
+  const start = S.events.find(e => e.type === "optimization_start");
+  if (!start?.ts) return;
+  const startMs = new Date(start.ts).getTime();
+  const tick = () => {
+    const elapsed = (Date.now() - startMs) / 1000;
+    document.getElementById("elapsed").textContent = fmtElapsed(elapsed);
+  };
+  tick();
+  S.elapsedTimer = setInterval(tick, 1000);
+  startStalenessDetection();
+}
+
+function stopElapsedTimer() {
+  if (S.elapsedTimer) { clearInterval(S.elapsedTimer); S.elapsedTimer = null; }
+  if (S.stalenessTimer) { clearInterval(S.stalenessTimer); S.stalenessTimer = null; }
+}
+
+function startStalenessDetection() {
+  if (S.stalenessTimer) return;
+  S.lastEventTs = Date.now();
+  S.stalenessTimer = setInterval(() => {
+    const end = S.events.find(e => e.type === "optimization_complete");
+    if (end) { stopElapsedTimer(); return; }
+    if (Date.now() - S.lastEventTs > 30000) {
+      const el = document.getElementById("status");
+      el.className = "badge badge-idle"; el.textContent = "Stalled";
+      stopElapsedTimer();
+    }
+  }, 5000);
+}
 
 function updateHeader() {
   const start = S.events.find(e => e.type === "optimization_start");
@@ -251,9 +426,14 @@ function updateHeader() {
 
   if (end) {
     el.className = "badge badge-complete"; el.textContent = "Complete";
-    document.getElementById("elapsed").textContent = fmt(end.elapsed_seconds, 0) + "s";
+    stopElapsedTimer();
+    document.getElementById("elapsed").textContent = fmtElapsed(end.elapsed_seconds);
   } else if (start) {
     el.className = "badge badge-running"; el.textContent = "Running";
+    startElapsedTimer();
+  } else {
+    el.className = "badge badge-idle"; el.textContent = "Idle";
+    stopElapsedTimer();
   }
 
   if (start) {
@@ -262,21 +442,34 @@ function updateHeader() {
     document.getElementById("sub-model").textContent = shortModel(start.sub_model) + (start.sub_reasoning ? ` (${start.sub_reasoning})` : "");
   }
 
-  const cost = S.manifest?.total_cost_usd ?? (end?.total_cost_usd ?? null);
+  // Cost and I/O: prefer manifest, then completion event, then latest stats event
+  const latestStats = S.events.filter(e => e.type === "stats").at(-1);
+  const costSource = S.manifest ?? end ?? latestStats;
+  const cost = costSource?.total_cost_usd ?? null;
   document.getElementById("total-cost").textContent = cost != null ? "$" + fmt(cost, 2) : "--";
-  const elapsed = S.manifest?.elapsed_seconds ?? end?.elapsed_seconds;
-  if (elapsed) document.getElementById("elapsed").textContent = fmt(elapsed, 0) + "s";
 
-  // I/O breakdown from manifest or completion event
-  const m = S.manifest;
+  const ioSource = S.manifest ?? end ?? latestStats;
   const ioEl = document.getElementById("io-totals");
-  if (m?.student?.input_tokens != null) {
-    const s = m.student, t = m.teacher, sub = m.sub;
+  if (ioSource?.student?.input_tokens != null) {
+    const s = ioSource.student, t = ioSource.teacher, sub = ioSource.sub;
     ioEl.textContent = `R:${fmtK(s.input_tokens)}/${fmtK(s.output_tokens)} T:${fmtK(t.input_tokens)}/${fmtK(t.output_tokens)} S:${fmtK(sub.input_tokens)}/${fmtK(sub.output_tokens)}`;
-  } else if (end?.student?.input_tokens != null) {
-    const s = end.student, t = end.teacher, sub = end.sub;
-    ioEl.textContent = `R:${fmtK(s.input_tokens)}/${fmtK(s.output_tokens)} T:${fmtK(t.input_tokens)}/${fmtK(t.output_tokens)} S:${fmtK(sub.input_tokens)}/${fmtK(sub.output_tokens)}`;
+  } else {
+    ioEl.textContent = "--";
   }
+}
+
+function renderRunSelect() {
+  const sel = document.getElementById("run-select");
+  sel.innerHTML = S.runs.map(r => {
+    const d = r.startedAt ? new Date(r.startedAt) : null;
+    const label = d
+      ? d.toLocaleDateString("en-US", { month: "short", day: "numeric" }) + ", " + d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })
+      : r.id;
+    const status = r.status === "complete" ? "done" : "live";
+    const costStr = r.costUsd != null ? `, $${Number(r.costUsd).toFixed(2)}` : "";
+    const selected = r.id === S.currentRun ? "selected" : "";
+    return `<option value="${r.id}" ${selected}>${label} (${status}, ${r.evalCount} evals${costStr})</option>`;
+  }).join("");
 }
 
 function renderCandidates() {
@@ -352,38 +545,158 @@ function selectEval(eventIdx) {
       <div class="iteration-label">Step ${i + 1}</div>`;
 
     if (t.reasoning) {
-      html += `<div class="reasoning-block">${escHtml(t.reasoning)}</div>`;
+      html += `<div class="reasoning-block">${renderMarkdown(t.reasoning)}</div>`;
     }
     if (t.code) {
-      html += `<div><div class="code-label">Code</div><div class="code-block">${escHtml(t.code)}</div></div>`;
+      html += `<div><div class="code-label">Code</div><div class="code-block"><pre class="language-python"><code class="language-python">${escHtml(t.code)}</code></pre></div></div>`;
     }
     if (t.output) {
-      html += `<div><div class="code-label">Output</div><div class="output-block">${escHtml(t.output)}</div></div>`;
+      html += `<div><div class="code-label">Output</div><div class="output-block">${renderOutput(t.output)}</div></div>`;
     }
     html += `</div>`;
   });
 
   container.innerHTML = html;
+  Prism.highlightAllUnder(container);
+}
+
+function getBaselineSize() {
+  const start = S.events.find(e => e.type === "optimization_start");
+  return start?.n_examples ?? 20;
+}
+
+function buildEvalIndex() {
+  const nSplits = getBaselineSize();
+  const evals = S.events.filter(e => e.type === "eval");
+  const baselineSet = new Set(evals.slice(0, nSplits));
+
+  // Map each mutation eval to its iteration using iteration marker events
+  const iterEvents = S.events.filter(e => e.type === "iteration");
+  const iterationOf = new Map();
+  for (const ev of evals) {
+    if (baselineSet.has(ev)) continue;
+    const evIdx = S.events.indexOf(ev);
+    let iterIdx = 0;
+    for (const it of iterEvents) {
+      if (S.events.indexOf(it) < evIdx) iterIdx = it.idx;
+    }
+    iterationOf.set(ev, iterIdx);
+  }
+
+  const mutationCount = evals.length - baselineSet.size;
+  const iterationCount = iterEvents.length ? iterEvents[iterEvents.length - 1].idx : 0;
+  return { baselineSet, iterationOf, nSplits, totalEvals: evals.length, mutationCount, iterationCount };
+}
+
+function getPhaseInfo() {
+  const { nSplits, totalEvals, mutationCount } = buildEvalIndex();
+  const baselineEvals = Math.min(totalEvals, nSplits);
+  const isComplete = S.events.some(e => e.type === "optimization_complete");
+
+  let phase = "idle";
+  if (isComplete) phase = "complete";
+  else if (mutationCount > 0) phase = "optimizing";
+  else if (baselineEvals > 0) phase = "baseline";
+
+  return { phase, baselineEvals, mutationEvals: mutationCount, totalEvals, nSplits };
+}
+
+function renderPhaseIndicator() {
+  const container = document.getElementById("phase-indicator");
+  const { phase, baselineEvals, mutationEvals, totalEvals, nSplits } = getPhaseInfo();
+
+  if (phase === "idle") { container.innerHTML = ""; return; }
+
+  let label, pct, countText, barClass;
+  if (phase === "baseline") {
+    label = "Phase 1 &mdash; Baseline";
+    pct = Math.min(100, (baselineEvals / nSplits) * 100);
+    countText = `${baselineEvals} / ${nSplits}`;
+    barClass = "baseline";
+  } else if (phase === "optimizing") {
+    label = "Phase 2 &mdash; Optimizing";
+    pct = Math.min(100, (mutationEvals / 830) * 100);
+    countText = `${mutationEvals} mutation evals`;
+    barClass = "optimizing";
+  } else {
+    label = "Complete";
+    pct = 100;
+    countText = `${totalEvals} total evals`;
+    barClass = "complete";
+  }
+
+  container.innerHTML = `<div class="phase-progress">
+    <span class="phase-label ${barClass}">${label}</span>
+    <div class="phase-bar"><div class="phase-bar-fill ${barClass}" style="width:${pct}%"></div></div>
+    <span class="phase-count">${countText}</span>
+  </div>`;
 }
 
 function renderEventLog() {
   const container = document.getElementById("event-log");
-  const visible = S.events.filter(e => e.type !== "candidate");
+  const visible = S.events.filter(e => e.type !== "candidate" && e.type !== "stats");
   if (!visible.length) return;
 
-  container.innerHTML = visible.slice().reverse().slice(0, 200).map(ev => {
+  renderPhaseIndicator();
+
+  const { baselineSet, iterationOf } = buildEvalIndex();
+  const reversed = visible.slice().reverse().slice(0, 200);
+  let lastPhase = null;
+  let lastIter = null;
+  const rows = [];
+
+  for (const ev of reversed) {
+    if (ev.type === "phase") {
+      const cls = ev.phase === "baseline" ? "baseline" : "optimizing";
+      const label = ev.phase === "baseline"
+        ? `Phase 1: Baseline Evaluation (${ev.n_splits ?? "?"} splits)`
+        : "Phase 2: Optimization (constrained teacher)";
+      rows.push(`<div class="phase-banner ${cls}">${label}</div>`);
+      lastPhase = null;
+      lastIter = null;
+      continue;
+    }
+
+    if (ev.type === "iteration") continue;
+
+    if (ev.type === "eval") {
+      const isBaseline = baselineSet.has(ev);
+      const phase = isBaseline ? "baseline" : "mutation";
+
+      if (lastPhase !== null && phase !== lastPhase) {
+        const cls = phase === "mutation" ? "optimizing" : "baseline";
+        const label = phase === "mutation" ? "Mutation Evaluations" : "Baseline Evaluations";
+        rows.push(`<div class="phase-banner ${cls}">${label}</div>`);
+      }
+      lastPhase = phase;
+
+      if (!isBaseline) {
+        const iterIdx = iterationOf.get(ev) ?? 0;
+        if (iterIdx > 0 && iterIdx !== lastIter) {
+          rows.push(`<div class="iter-separator">Iteration ${iterIdx}</div>`);
+          lastIter = iterIdx;
+        }
+      } else {
+        lastIter = null;
+      }
+    }
+
     const origIdx = S.events.indexOf(ev);
     const time = ev.ts ? new Date(ev.ts).toLocaleTimeString() : "";
     const sel = S.selectedEval === origIdx ? "selected" : "";
     let body = "";
     let clickAttr = "";
+    let badgeClass = ev.type;
+    let bodyClass = "";
 
     if (ev.type === "eval") {
+      const isMutation = !baselineSet.has(ev);
+      badgeClass = isMutation ? "eval-mutation" : "eval-baseline";
+      bodyClass = isMutation ? "mutation" : "baseline";
       body = `Split ${ev.split ?? "?"}: RMSE ${fmt(ev.rmse)} &middot; Score ${fmt(ev.score, 4)} &middot; ${ev.n_iterations ?? "?"} iters`;
-      if (ev.instruction_preview) body += ` &middot; <span style="color:var(--yellow)">prompt</span>`;
       clickAttr = `onclick="selectEval(${origIdx})"`;
     } else if (ev.type === "optimization_complete") {
-      const parts = [`Finished in ${fmt(ev.elapsed_seconds, 0)}s`, `$${fmt(ev.total_cost_usd, 2)}`];
+      const parts = [`Finished in ${fmtElapsed(ev.elapsed_seconds)}`, `$${fmt(ev.total_cost_usd, 2)}`];
       if (ev.student) parts.push(`root: ${fmtK(ev.student.input_tokens)}in/${fmtK(ev.student.output_tokens)}out`);
       if (ev.sub) parts.push(`sub: ${fmtK(ev.sub.input_tokens)}in/${fmtK(ev.sub.output_tokens)}out`);
       body = parts.join(" &middot; ");
@@ -391,14 +704,20 @@ function renderEventLog() {
       body = `${ev.n_examples} examples`;
     }
 
-    return `<div class="event ${sel}" ${clickAttr}>
+    const badgeLabel = badgeClass === "eval-baseline" ? "baseline"
+      : badgeClass === "eval-mutation" ? "mutation"
+      : ev.type.replace("_", " ");
+
+    rows.push(`<div class="event ${sel}" ${clickAttr}>
       <div class="event-row">
         <span class="event-time">${time}</span>
-        <span class="event-type ${ev.type}">${ev.type.replace("_", " ")}</span>
+        <span class="event-type ${badgeClass}">${badgeLabel}</span>
       </div>
-      ${body ? `<div class="event-body">${body}</div>` : ""}
-    </div>`;
-  }).join("");
+      ${body ? `<div class="event-body ${bodyClass}">${body}</div>` : ""}
+    </div>`);
+  }
+
+  container.innerHTML = rows.join("");
 }
 
 function renderChart() {
@@ -420,7 +739,6 @@ function renderChart() {
   const yMax = d3.max(evals, d => d.score) * 1.05;
   const y = d3.scaleLinear().domain([0, yMax]).range([height, 0]);
 
-  // Grid lines
   svg.selectAll(".grid-line")
     .data(y.ticks(4)).enter().append("line")
     .attr("x1", 0).attr("x2", width).attr("y1", d => y(d)).attr("y2", d => y(d))
@@ -436,22 +754,21 @@ function renderChart() {
     .call(g => g.selectAll(".tick line").remove())
     .call(g => g.selectAll(".tick text").attr("fill", "#666").style("font-family", "var(--mono)").style("font-size", "10px"));
 
-  // Gradient fill
   const gradientId = "area-grad";
   const defs = svg.append("defs");
   const gradient = defs.append("linearGradient").attr("id", gradientId).attr("x1", 0).attr("x2", 0).attr("y1", 0).attr("y2", 1);
-  gradient.append("stop").attr("offset", "0%").attr("stop-color", "#0070f3").attr("stop-opacity", 0.15);
-  gradient.append("stop").attr("offset", "100%").attr("stop-color", "#0070f3").attr("stop-opacity", 0);
+  gradient.append("stop").attr("offset", "0%").attr("stop-color", "var(--accent)").attr("stop-opacity", 0.15);
+  gradient.append("stop").attr("offset", "100%").attr("stop-color", "var(--accent)").attr("stop-opacity", 0);
 
   const area = d3.area().x((_, i) => x(i)).y0(height).y1(d => y(d.score)).curve(d3.curveMonotoneX);
   svg.append("path").datum(evals).attr("fill", `url(#${gradientId})`).attr("d", area);
 
   const line = d3.line().x((_, i) => x(i)).y(d => y(d.score)).curve(d3.curveMonotoneX);
-  svg.append("path").datum(evals).attr("fill", "none").attr("stroke", "#0070f3").attr("stroke-width", 1.5).attr("d", line);
+  svg.append("path").datum(evals).attr("fill", "none").attr("stroke", "#50e3c2").attr("stroke-width", 1.5).attr("d", line);
 
   svg.selectAll(".dot").data(evals).enter().append("circle")
     .attr("cx", (_, i) => x(i)).attr("cy", d => y(d.score)).attr("r", 2.5)
-    .attr("fill", "#0070f3").attr("stroke", "#000").attr("stroke-width", 1);
+    .attr("fill", "#50e3c2").attr("stroke", "#000").attr("stroke-width", 1);
 }
 
 function render() {
@@ -461,18 +778,47 @@ function render() {
   renderChart();
 }
 
-async function fetchData() {
+async function fetchRuns() {
+  try {
+    S.runs = await fetch("/api/runs").then(r => r.json());
+    if (S.runs.length && !S.currentRun) {
+      const hashRun = getHashRun();
+      if (hashRun && S.runs.some(r => r.id === hashRun)) {
+        S.currentRun = hashRun;
+        S.userSelectedRun = true;
+      } else {
+        S.currentRun = S.runs[0].id;
+      }
+      setHashRun(S.currentRun);
+    }
+    renderRunSelect();
+  } catch (e) {
+    console.error("Failed to fetch runs:", e);
+  }
+}
+
+async function fetchRunData(runId) {
   try {
     const [events, manifest] = await Promise.all([
-      fetch("/api/events").then(r => r.json()),
-      fetch("/api/manifest").then(r => r.ok ? r.json() : null),
+      fetch(`/api/events?run=${runId}`).then(r => r.json()),
+      fetch(`/api/manifest?run=${runId}`).then(r => r.ok ? r.json() : null),
     ]);
     S.events = events;
     S.manifest = manifest;
+    S.selectedCandidate = null;
+    S.selectedEval = null;
     render();
   } catch (e) {
-    console.error("Fetch failed:", e);
+    console.error("Failed to fetch run data:", e);
   }
+}
+
+async function switchRun(runId) {
+  S.currentRun = runId;
+  S.userSelectedRun = true;
+  setHashRun(runId);
+  stopElapsedTimer();
+  await fetchRunData(runId);
 }
 
 function connectSSE() {
@@ -481,17 +827,49 @@ function connectSSE() {
     try {
       const ev = JSON.parse(msg.data);
       if (ev.type === "connected") return;
-      if (ev.type === "manifest") { S.manifest = ev; }
-      else { S.events.push(ev); }
-      render();
+      const evRun = ev._run;
+      delete ev._run;
+
+      S.lastEventTs = Date.now();
+
+      if (ev.type === "manifest") {
+        if (evRun === S.currentRun) { S.manifest = ev; render(); }
+      } else {
+        // Auto-switch to new run only if user hasn't manually selected and it's genuinely new
+        const isNewRun = ev.type === "optimization_start"
+          && evRun !== S.currentRun
+          && !S.userSelectedRun
+          && !S.runs.some(r => r.id === evRun);
+        if (isNewRun) {
+          S.currentRun = evRun;
+          S.events = [ev];
+          S.manifest = null;
+          S.selectedCandidate = null;
+          S.selectedEval = null;
+          setHashRun(evRun);
+          fetchRuns();
+          render();
+          return;
+        }
+        if (evRun === S.currentRun) {
+          S.events.push(ev);
+          if (ev.type === "stats") { updateHeader(); }
+          else { render(); }
+        }
+        if (ev.type === "eval" || ev.type === "optimization_complete") fetchRuns();
+      }
     } catch {}
   };
   source.onerror = () => { source.close(); setTimeout(connectSSE, 3000); };
 }
 
-fetchData();
-connectSSE();
-setInterval(fetchData, 15000);
+async function init() {
+  await fetchRuns();
+  if (S.currentRun) await fetchRunData(S.currentRun);
+  connectSSE();
+}
+
+init();
 </script>
 </body>
 </html>

@@ -40,16 +40,38 @@ def crash_metric(gold, pred, trace=None, pred_name=None, pred_trace=None):
         return ScoreWithFeedback(score=0.0, feedback="No valid predictions")
 
     rmse = float(np.sqrt(np.nanmean((actual - pred_values) ** 2)))
-    score = 1.0 / (1.0 + rmse)
+    score = max(0.0, 1.0 - rmse / 20.0)
 
     per_state = []
     for st, a in zip(test_states, actual):
         p = preds_dict.get(st, float("nan"))
         per_state.append(f"{STATE_NAMES[st]} ({st}): predicted {p:.1f}, actual {a:.1f}, error {p - a:+.1f}")
-    feedback = f"RMSE: {rmse:.2f}\n" + "\n".join(per_state)
+
+    trajectory = getattr(pred, "trajectory", [])
+    final_reasoning = getattr(pred, "final_reasoning", "")
+
+    parts = [f"RMSE: {rmse:.2f}\n"]
+    if trajectory:
+        parts.append("## Agent Trajectory\n")
+        for i, t in enumerate(trajectory):
+            parts.append(f"### Iteration {i + 1}")
+            r = t.get("reasoning", "")
+            if r:
+                parts.append(f"Reasoning: {r[:3000]}")
+            c = t.get("code", "")
+            if c:
+                parts.append(f"Code:\n{c[:3000]}")
+            o = t.get("output", "")
+            if o:
+                parts.append(f"Output:\n{o[:2000]}")
+            parts.append("")
+    if final_reasoning:
+        parts.append(f"## Final Reasoning\n{final_reasoning[:3000]}\n")
+    parts.append("## Per-State Results")
+    parts.extend(per_state)
+    feedback = "\n".join(parts)
 
     if _event_log is not None:
-        trajectory = getattr(pred, "trajectory", [])
         event = {
             "type": "eval",
             "split": getattr(gold, "split_idx", None),

@@ -20,7 +20,7 @@ from data_utils import build_dataset, make_examples
 from local_interpreter import LocalInterpreter
 from signatures import CrashPredictorBase, STATE_NAMES
 
-STUDENT_MODEL = "openai/gpt-5.4-mini"
+STUDENT_MODEL = "gemini/gemini-3-flash-preview"
 SUB_MODEL = "gemini/gemini-3-flash-preview"
 OUTPUT_DIR = Path("/Users/ethanaggor/sandbox/tmp")
 PROMPT_PATH = Path(__file__).resolve().parent.parent / "prompts" / "crash_predictor_rlm.md"
@@ -133,7 +133,7 @@ def main():
     examples = make_examples(df, n_splits=20, seed=42)
     example = examples[0]
 
-    student_lm = dspy.LM(STUDENT_MODEL, api_key=os.environ["OPENAI_API_KEY"], reasoning_effort="xhigh", cache=False)
+    student_lm = dspy.LM(STUDENT_MODEL, api_key=os.environ["GEMINI_API_KEY"], reasoning_effort="high", cache=False)
     sub_lm = dspy.LM(SUB_MODEL, api_key=os.environ["GEMINI_API_KEY"], reasoning_effort="high", cache=False)
     dspy.configure(lm=student_lm)
 
@@ -150,7 +150,7 @@ def main():
     )
 
     print(f"Running RLM on split 0 ({len(example.test_states)} held-out states)...")
-    print(f"Root: {STUDENT_MODEL} (xhigh) | Sub: {SUB_MODEL} (high)")
+    print(f"Root: {STUDENT_MODEL} (high) | Sub: {SUB_MODEL} (high)")
     t0 = time.time()
 
     result = predictor(

@@ -1,8 +1,8 @@
 """Local Python interpreter implementing the CodeInterpreter protocol for RLM."""
 
+import copy
 import io
 import re
-import sys
 from typing import Any, Callable
 
 import numpy as np
@@ -37,6 +37,9 @@ class LocalInterpreter:
         self.output_fields: list[dict] | None = None
         self._tools_registered: bool = False
 
+    def __deepcopy__(self, memo):
+        return LocalInterpreter()
+
     def start(self) -> None:
         pass
 
@@ -45,7 +48,7 @@ class LocalInterpreter:
             self.namespace.update(variables)
 
         self.namespace.update(self.tools)
-        self.namespace["SUBMIT"] = _make_submit()
+        self.namespace["SUBMIT"] = _make_submit(self.output_fields)
 
         for pattern in BANNED_PATTERNS:
             match = re.search(pattern, code)
@@ -54,8 +57,8 @@ class LocalInterpreter:
                     f"Banned method: {match.group()}. Only numpy and pandas are available."
                 )
 
-        old_stdout = sys.stdout
-        sys.stdout = buf = io.StringIO()
+        buf = io.StringIO()
+        self.namespace["print"] = lambda *args, **kwargs: print(*args, file=buf, **kwargs)
         try:
             exec(code, self.namespace)
             return buf.getvalue()
@@ -65,8 +68,6 @@ class LocalInterpreter:
             raise
         except Exception as e:
             raise CodeInterpreterError(str(e)) from e
-        finally:
-            sys.stdout = old_stdout
 
     def shutdown(self):
         self.namespace = dict(self._base)
@@ -74,7 +75,14 @@ class LocalInterpreter:
         self._tools_registered = False
 
 
-def _make_submit():
+def _make_submit(output_fields=None):
+    if output_fields:
+        names = [f["name"] for f in output_fields]
+        # Build positional-arg SUBMIT matching DSPy's default convention
+        code = f"def SUBMIT({', '.join(names)}):\n    raise _SubmitSignal({{{', '.join(f'\"{n}\": {n}' for n in names)}}})"
+        ns = {"_SubmitSignal": _SubmitSignal}
+        exec(code, ns)
+        return ns["SUBMIT"]
     def SUBMIT(**kwargs):
         raise _SubmitSignal(kwargs)
     return SUBMIT
