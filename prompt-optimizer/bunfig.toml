@@ -1,0 +1,5 @@
+[run]
+bun = true
+
+[run.scripts]
+dev = "bun --watch run server.ts"
