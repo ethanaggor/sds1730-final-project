@@ -1,8 +1,7 @@
-"""Local Python interpreter implementing the CodeInterpreter protocol for RLM."""
-
 import copy
 import io
 import re
+import threading
 from typing import Any, Callable
 
 import numpy as np
@@ -21,6 +20,12 @@ BANNED_PATTERNS = [
     r"np\.linalg\.lstsq",
 ]
 
+_LOOP_THRESHOLD = 3
+_LOOP_WARNING = (
+    "\nWARNING: You have produced identical output 3 times in a row. "
+    "Try a different analytical approach or call SUBMIT with your current best predictions."
+)
+
 
 class _SubmitSignal(Exception):
     def __init__(self, fields):
@@ -28,14 +33,27 @@ class _SubmitSignal(Exception):
 
 
 class LocalInterpreter:
-    """Python interpreter with numpy/pandas, banned-method enforcement, and SUBMIT support."""
-
     def __init__(self):
         self._base: dict[str, Any] = {"np": np, "pd": pd, "__builtins__": __builtins__}
-        self.namespace: dict[str, Any] = dict(self._base)
+        self._tls = threading.local()
         self.tools: dict[str, Callable[..., str]] = {}
         self.output_fields: list[dict] | None = None
-        self._tools_registered: bool = False
+
+    @property
+    def namespace(self) -> dict[str, Any]:
+        if not hasattr(self._tls, "ns"):
+            self._tls.ns = dict(self._base)
+        return self._tls.ns
+
+    @namespace.setter
+    def namespace(self, value: dict[str, Any]):
+        self._tls.ns = value
+
+    @property
+    def _recent_outputs(self) -> list[str]:
+        if not hasattr(self._tls, "recent_outputs"):
+            self._tls.recent_outputs = []
+        return self._tls.recent_outputs
 
     def __deepcopy__(self, memo):
         return LocalInterpreter()
@@ -44,11 +62,12 @@ class LocalInterpreter:
         pass
 
     def execute(self, code: str, variables: dict[str, Any] | None = None) -> Any:
+        ns = self.namespace
         if variables:
-            self.namespace.update(variables)
+            ns.update(copy.deepcopy(variables))
 
-        self.namespace.update(self.tools)
-        self.namespace["SUBMIT"] = _make_submit(self.output_fields)
+        ns.update(self.tools)
+        ns["SUBMIT"] = _make_submit(self.output_fields)
 
         for pattern in BANNED_PATTERNS:
             match = re.search(pattern, code)
@@ -58,10 +77,10 @@ class LocalInterpreter:
                 )
 
         buf = io.StringIO()
-        self.namespace["print"] = lambda *args, **kwargs: print(*args, file=buf, **kwargs)
+        ns["print"] = lambda *args, **kwargs: print(*args, file=buf, **kwargs)
         try:
-            exec(code, self.namespace)
-            return buf.getvalue()
+            exec(code, ns)
+            output = buf.getvalue()
         except _SubmitSignal as s:
             return FinalOutput(s.fields)
         except SyntaxError:
@@ -69,10 +88,19 @@ class LocalInterpreter:
         except Exception as e:
             raise CodeInterpreterError(str(e)) from e
 
+        history = self._recent_outputs
+        history.append(output)
+        if len(history) > _LOOP_THRESHOLD:
+            history.pop(0)
+        if len(history) >= _LOOP_THRESHOLD and len(set(history)) == 1:
+            output += _LOOP_WARNING
+
+        return output
+
     def shutdown(self):
         self.namespace = dict(self._base)
+        self._tls.recent_outputs = []
         self.tools.clear()
-        self._tools_registered = False
 
 
 def _make_submit(output_fields=None):

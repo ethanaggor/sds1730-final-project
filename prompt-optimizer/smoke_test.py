@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
-"""Single-split smoke test: run RLM student, save annotated transcript."""
-
-import json
 import os
-import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -14,47 +10,29 @@ from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).resolve().parent.parent.parent / ".env")
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-
 from data_utils import build_dataset, make_examples
 from local_interpreter import LocalInterpreter
+from optimize import _lm_stats
 from signatures import CrashPredictorBase, STATE_NAMES
 
 STUDENT_MODEL = "gemini/gemini-3-flash-preview"
 SUB_MODEL = "gemini/gemini-3-flash-preview"
-OUTPUT_DIR = Path("/Users/ethanaggor/sandbox/tmp")
-PROMPT_PATH = Path(__file__).resolve().parent.parent / "prompts" / "crash_predictor_rlm.md"
-
-
-def _token_totals(lm):
-    total_input = total_output = total_cached = 0
-    total_cost = 0.0
-    for h in lm.history:
-        u = h.get("usage", {})
-        inp = u.get("prompt_tokens", 0) if isinstance(u, dict) else getattr(u, "prompt_tokens", 0) or 0
-        out = u.get("completion_tokens", 0) if isinstance(u, dict) else getattr(u, "completion_tokens", 0) or 0
-        det = getattr(u, "prompt_tokens_details", None)
-        cch = getattr(det, "cached_tokens", 0) if det else 0
-        c = h.get("cost") or 0.0
-        total_input += inp
-        total_output += out
-        total_cached += cch
-        total_cost += c
-    return total_input, total_output, total_cached, total_cost
+OUTPUT_DIR = Path(__file__).resolve().parent.parent / "results"
+PROMPT_PATH = Path(__file__).resolve().parent.parent / "prompts" / "rlm.md"
 
 
 def build_transcript(result, example, elapsed, student_lm, sub_lm) -> str:
     lines = []
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
 
-    s_in, s_out, s_cached, s_cost = _token_totals(student_lm)
-    sub_in, sub_out, sub_cached, sub_cost = _token_totals(sub_lm)
+    s = _lm_stats(student_lm)
+    sub = _lm_stats(sub_lm)
 
-    lines.append("# Smoke Test: GPT-5.4 mini (xhigh) -- RLM")
+    lines.append(f"# Smoke Test: {STUDENT_MODEL} (high) -- RLM")
     lines.append(f"**Time**: {elapsed:.1f}s")
-    lines.append(f"**Root** ({STUDENT_MODEL}): {s_in:,} in ({s_cached:,} cached) / {s_out:,} out / ${s_cost:.4f} / {len(student_lm.history)} calls")
-    lines.append(f"**Sub** ({SUB_MODEL}): {sub_in:,} in ({sub_cached:,} cached) / {sub_out:,} out / ${sub_cost:.4f} / {len(sub_lm.history)} calls")
-    lines.append(f"**Total cost**: ${s_cost + sub_cost:.4f}")
+    lines.append(f"**Root** ({STUDENT_MODEL}): {s['input_tokens']:,} in ({s['cached_tokens']:,} cached) / {s['output_tokens']:,} out / ${s['cost_usd']:.4f} / {s['calls']} calls")
+    lines.append(f"**Sub** ({SUB_MODEL}): {sub['input_tokens']:,} in ({sub['cached_tokens']:,} cached) / {sub['output_tokens']:,} out / ${sub['cost_usd']:.4f} / {sub['calls']} calls")
+    lines.append(f"**Total cost**: ${s['cost_usd'] + sub['cost_usd']:.4f}")
     lines.append(f"**Timestamp**: {now}")
     lines.append("")
 
@@ -160,14 +138,6 @@ def main():
 
     elapsed = time.time() - t0
     print(f"Done in {elapsed:.1f}s")
-
-    for label, lm in [("root", student_lm), ("sub", sub_lm)]:
-        for i, h in enumerate(lm.history):
-            u = h.get("usage", {})
-            inp = u.get("prompt_tokens", 0) if isinstance(u, dict) else getattr(u, "prompt_tokens", 0) or 0
-            out = u.get("completion_tokens", 0) if isinstance(u, dict) else getattr(u, "completion_tokens", 0) or 0
-            c = h.get("cost") or 0.0
-            print(f"  {label} call {i}: input={inp:,}, output={out:,}, cost=${c:.4f}")
 
     transcript = build_transcript(result, example, elapsed, student_lm, sub_lm)
 

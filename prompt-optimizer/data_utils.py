@@ -4,15 +4,11 @@ import dspy
 import numpy as np
 import pandas as pd
 
+from signatures import STATE_NAMES
+
 DATA_DIR = Path(__file__).resolve().parent.parent / "data" / "raw"
 
-STATES = [
-    "AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "FL", "GA",
-    "HI", "ID", "IL", "IN", "IA", "KS", "KY", "LA", "ME", "MD",
-    "MA", "MI", "MN", "MS", "MO", "MT", "NE", "NV", "NH", "NJ",
-    "NM", "NY", "NC", "ND", "OH", "OK", "OR", "PA", "RI", "SC",
-    "SD", "TN", "TX", "UT", "VT", "VA", "WA", "WV", "WI", "WY", "DC",
-]
+STATES = list(STATE_NAMES.keys())
 
 
 def _load_fred(series_id: str) -> pd.DataFrame:

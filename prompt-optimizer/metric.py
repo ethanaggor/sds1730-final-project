@@ -11,7 +11,6 @@ def set_event_log(log):
 
 
 def _extract_instruction(pred_trace):
-    """Extract candidate instruction text from GEPA's pred_trace."""
     if not pred_trace:
         return None
     try:
@@ -23,7 +22,6 @@ def _extract_instruction(pred_trace):
 
 
 def crash_metric(gold, pred, trace=None, pred_name=None, pred_trace=None):
-    """GEPA-compatible metric returning ScoreWithFeedback."""
     from dspy.teleprompt.gepa.gepa_utils import ScoreWithFeedback
 
     actual = np.array(gold.actual_values)
@@ -36,8 +34,9 @@ def crash_metric(gold, pred, trace=None, pred_name=None, pred_trace=None):
 
     pred_values = np.array([preds_dict.get(st, np.nan) for st in test_states])
     valid = ~np.isnan(pred_values)
-    if not valid.any():
-        return ScoreWithFeedback(score=0.0, feedback="No valid predictions")
+    if not valid.all():
+        missing = [st for st, v in zip(test_states, valid) if not v]
+        return ScoreWithFeedback(score=0.0, feedback=f"Missing predictions for: {', '.join(missing)}")
 
     rmse = float(np.sqrt(np.nanmean((actual - pred_values) ** 2)))
     score = max(0.0, 1.0 - rmse / 20.0)
@@ -67,6 +66,16 @@ def crash_metric(gold, pred, trace=None, pred_name=None, pred_trace=None):
             parts.append("")
     if final_reasoning:
         parts.append(f"## Final Reasoning\n{final_reasoning[:3000]}\n")
+    parts.append("## Optimization Constraints")
+    parts.append(
+        "When improving the prompt, do NOT copy specific crash_pct values, "
+        "state-specific results, verbatim phrases, or lookup tables from these examples. "
+        "Generalize to analytical rules that apply broadly."
+    )
+    parts.append(
+        "You must NOT change the output format, SUBMIT mechanics, or REPL interaction pattern. "
+        "Only improve the analytical reasoning strategy."
+    )
     parts.append("## Per-State Results")
     parts.extend(per_state)
     feedback = "\n".join(parts)
