@@ -18,9 +18,3 @@ final_project_files/
 # OS
 .DS_Store
 
-# References (template notebook, not part of submission)
-references/
-
-# Project planning (internal)
-plan.md
-CLAUDE.md

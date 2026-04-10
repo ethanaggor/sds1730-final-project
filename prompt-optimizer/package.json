@@ -1,6 +1,0 @@
-{
-  "name": "gepa-dashboard",
-  "scripts": {
-    "dev": "bun --watch run server.ts"
-  }
-}
