@@ -18,7 +18,7 @@
 | Metric | score = max(0, 1 - RMSE/20) |
 | Two-phase compile | Phase 1: baseline only (20 evals), Phase 2: constrained optimization |
 
-Changes from Run 1: added a custom reflection template (`reflection_template.md`) that forbids the teacher from embedding actual data values in mutated instructions. Added two-phase compilation with baseline checkpoint preservation.
+Changes from Run 1: added a custom reflection template (`prompts/GEPA_reflection_template.md`) that forbids the teacher from embedding actual data values in mutated instructions. Added two-phase compilation with baseline checkpoint preservation.
 
 ## Cost
 
