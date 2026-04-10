@@ -437,9 +437,10 @@ function updateHeader() {
   }
 
   if (start) {
-    document.getElementById("student-model").textContent = shortModel(start.student_model) + (start.student_reasoning ? ` (${start.student_reasoning})` : "");
-    document.getElementById("teacher-model").textContent = shortModel(start.teacher_model) + (start.teacher_reasoning ? ` (${start.teacher_reasoning})` : "");
-    document.getElementById("sub-model").textContent = shortModel(start.sub_model) + (start.sub_reasoning ? ` (${start.sub_reasoning})` : "");
+    const re = start.reasoning_effort ?? start.student_reasoning ?? null;
+    document.getElementById("student-model").textContent = shortModel(start.student_model) + (re ? ` (${re})` : "");
+    document.getElementById("teacher-model").textContent = shortModel(start.teacher_model) + (re ? ` (${re})` : "");
+    document.getElementById("sub-model").textContent = shortModel(start.sub_model) + (re ? ` (${re})` : "");
   }
 
   // Cost and I/O: prefer manifest, then completion event, then latest stats event

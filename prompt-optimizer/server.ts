@@ -50,7 +50,11 @@ async function buildRunMeta(id: string) {
     id,
     status: end || manifest ? "complete" : "running",
     startedAt: start?.ts ?? null,
-    model: start?.student_model ?? null,
+    profile: start?.profile ?? null,
+    student: start?.student_model ?? null,
+    teacher: start?.teacher_model ?? null,
+    sub: start?.sub_model ?? null,
+    reasoningEffort: start?.reasoning_effort ?? null,
     evalCount: events.filter((e: any) => e.type === "eval").length,
     costUsd: costSource?.total_cost_usd ?? null,
   };
