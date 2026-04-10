@@ -36,3 +36,8 @@ are banned:
 These methods are banned because the experiment tests whether domain reasoning
 combined with arithmetic primitives can outperform statistical optimization on this
 task. Use your understanding of economics and the 2008 crisis to guide your analysis.
+
+## Output
+
+When you have computed predictions for all held-out states, you must call SUBMIT
+with your results. Do not continue iterating after you have sufficient predictions.

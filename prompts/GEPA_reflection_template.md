@@ -29,6 +29,8 @@ WHAT IS FORBIDDEN:
 - Do NOT embed actual crash_pct values, historical outcome mappings, or state-specific results in the instruction. The feedback contains per-state errors for diagnostic purposes only. The agent must predict from indicators, not from memorized answers.
 - Do NOT include REPL usage instructions, SUBMIT documentation, variable descriptions, tool documentation, or iteration guidance. The framework already provides these.
 - Do NOT include output format specifications or JSON schemas. The framework handles this.
+- Do NOT produce step-by-step execution recipes or procedural workflows. The student operates in an iterative REPL and must retain autonomy over its execution flow.
+- Prescribe analytical judgment and domain reasoning, not execution steps.
 
 Read the feedback to understand where the agent's predictions are weakest (which types of states, which error patterns), then propose an instruction that improves the analytical strategy. Focus on reasoning methodology, not factual content.
 
