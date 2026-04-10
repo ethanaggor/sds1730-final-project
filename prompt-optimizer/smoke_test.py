@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
+"""Single-split RLM evaluation using the active model profile."""
 import os
+import sys
 import time
-from datetime import datetime, timezone
 from pathlib import Path
 
 import dspy
@@ -12,107 +13,36 @@ load_dotenv(Path(__file__).resolve().parent.parent.parent / ".env")
 
 from data_utils import build_dataset, make_examples
 from local_interpreter import LocalInterpreter
-from optimize import _lm_stats
+from metric import crash_metric
+from optimize import PROFILES, DEFAULT_PROFILE, _lm_stats
 from signatures import CrashPredictorBase, STATE_NAMES
 
-STUDENT_MODEL = "gemini/gemini-3-flash-preview"
-SUB_MODEL = "gemini/gemini-3-flash-preview"
 OUTPUT_DIR = Path(__file__).resolve().parent.parent / "results"
 PROMPT_PATH = Path(__file__).resolve().parent.parent / "prompts" / "rlm.md"
 
 
-def build_transcript(result, example, elapsed, student_lm, sub_lm) -> str:
-    lines = []
-    now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
-
-    s = _lm_stats(student_lm)
-    sub = _lm_stats(sub_lm)
-
-    lines.append(f"# Smoke Test: {STUDENT_MODEL} (high) -- RLM")
-    lines.append(f"**Time**: {elapsed:.1f}s")
-    lines.append(f"**Root** ({STUDENT_MODEL}): {s['input_tokens']:,} in ({s['cached_tokens']:,} cached) / {s['output_tokens']:,} out / ${s['cost_usd']:.4f} / {s['calls']} calls")
-    lines.append(f"**Sub** ({SUB_MODEL}): {sub['input_tokens']:,} in ({sub['cached_tokens']:,} cached) / {sub['output_tokens']:,} out / ${sub['cost_usd']:.4f} / {sub['calls']} calls")
-    lines.append(f"**Total cost**: ${s['cost_usd'] + sub['cost_usd']:.4f}")
-    lines.append(f"**Timestamp**: {now}")
-    lines.append("")
-
-    trajectory = getattr(result, "trajectory", [])
-    if not trajectory:
-        lines.append("## No trajectory recorded")
-    else:
-        for i, entry in enumerate(trajectory):
-            lines.append(f"## Iteration {i + 1}")
-            lines.append("")
-
-            reasoning = entry.get("reasoning", "")
-            if reasoning:
-                lines.append("### Reasoning")
-                lines.append(reasoning)
-                lines.append("")
-
-            code = entry.get("code", "")
-            if code:
-                lines.append("### Code")
-                lines.append("```python")
-                lines.append(code)
-                lines.append("```")
-                lines.append("")
-
-            output = entry.get("output", "")
-            if output:
-                lines.append("### Output")
-                lines.append("```")
-                lines.append(output[:3000])
-                lines.append("```")
-                lines.append("")
-
-    final_reasoning = getattr(result, "final_reasoning", "")
-    if final_reasoning and (not trajectory or final_reasoning != trajectory[-1].get("reasoning", "")):
-        lines.append("## Final Reasoning")
-        lines.append(final_reasoning)
-        lines.append("")
-
-    lines.append("## Final Predictions")
-    lines.append("")
-    lines.append("| State | Predicted | Actual | Error |")
-    lines.append("|-------|-----------|--------|-------|")
-
-    actual = np.array(example.actual_values)
-    test_states = example.test_states
-
-    try:
-        preds_dict = {p.state: p.predicted_crash_pct for p in result.predictions}
-    except Exception as e:
-        lines.append(f"Failed to parse predictions: {e}")
-        lines.append("")
-        lines.append(f"Raw predictions field: {getattr(result, 'predictions', 'MISSING')}")
-        return "\n".join(lines)
-
-    pred_values = []
-    for st, act in zip(test_states, actual):
-        p = preds_dict.get(st, float("nan"))
-        pred_values.append(p)
-        err = p - act if not np.isnan(p) else float("nan")
-        lines.append(f"| {STATE_NAMES.get(st, st)} ({st}) | {p:.1f} | {act:.1f} | {err:+.1f} |")
-
-    pred_arr = np.array(pred_values)
-    valid = ~np.isnan(pred_arr)
-    if valid.any():
-        rmse = float(np.sqrt(np.nanmean((actual - pred_arr) ** 2)))
-        lines.append("")
-        lines.append(f"**RMSE: {rmse:.2f}**")
-
-    return "\n".join(lines)
-
-
 def main():
+    profile_name = os.environ.get("MODEL_PROFILE", DEFAULT_PROFILE)
+    for arg in sys.argv[1:]:
+        if arg.startswith("--profile="):
+            profile_name = arg.split("=", 1)[1]
+
+    if profile_name not in PROFILES:
+        sys.exit(f"Unknown profile: {profile_name!r}. Choose from: {', '.join(PROFILES)}")
+    profile = PROFILES[profile_name]
+
     print("Loading dataset...")
     df = build_dataset()
     examples = make_examples(df, n_splits=20, seed=42)
     example = examples[0]
 
-    student_lm = dspy.LM(STUDENT_MODEL, api_key=os.environ["GEMINI_API_KEY"], reasoning_effort="high", cache=False)
-    sub_lm = dspy.LM(SUB_MODEL, api_key=os.environ["GEMINI_API_KEY"], reasoning_effort="high", cache=False)
+    api_key = os.environ[profile["api_key_env"]]
+    lm_kwargs = {"api_key": api_key, "reasoning_effort": profile["reasoning_effort"], "cache": False}
+    if profile["max_tokens"] is not None:
+        lm_kwargs["max_tokens"] = profile["max_tokens"]
+
+    student_lm = dspy.LM(profile["student"], **lm_kwargs)
+    sub_lm = dspy.LM(profile["sub"], **lm_kwargs)
     dspy.configure(lm=student_lm)
 
     prompt_text = PROMPT_PATH.read_text()
@@ -128,18 +58,51 @@ def main():
     )
 
     print(f"Running RLM on split 0 ({len(example.test_states)} held-out states)...")
-    print(f"Root: {STUDENT_MODEL} (high) | Sub: {SUB_MODEL} (high)")
+    print(f"Profile: {profile_name} | Student: {profile['student']} ({profile['reasoning_effort']})")
     t0 = time.time()
 
-    result = predictor(
-        train_df=example.train_df,
-        test_df=example.test_df,
-    )
-
+    result = predictor(train_df=example.train_df, test_df=example.test_df)
     elapsed = time.time() - t0
-    print(f"Done in {elapsed:.1f}s")
 
-    transcript = build_transcript(result, example, elapsed, student_lm, sub_lm)
+    score_result = crash_metric(example, result)
+    score = score_result.score if hasattr(score_result, "score") else float(score_result)
+    feedback = getattr(score_result, "feedback", "")
+
+    s = _lm_stats(student_lm)
+    sub = _lm_stats(sub_lm)
+
+    lines = [
+        f"# Smoke Test: {profile['student']} ({profile['reasoning_effort']}) -- RLM",
+        f"**Profile**: {profile_name}",
+        f"**Time**: {elapsed:.1f}s",
+        f"**Score**: {score:.4f}",
+        f"**Student** ({profile['student']}): {s['input_tokens']:,} in / {s['output_tokens']:,} out / ${s['cost_usd']:.4f} / {s['calls']} calls",
+        f"**Sub** ({profile['sub']}): {sub['input_tokens']:,} in / {sub['output_tokens']:,} out / ${sub['cost_usd']:.4f} / {sub['calls']} calls",
+        f"**Total cost**: ${s['cost_usd'] + sub['cost_usd']:.4f}",
+        "",
+    ]
+
+    try:
+        preds_dict = {p.state: p.predicted_crash_pct for p in result.predictions}
+        actual = np.array(example.actual_values)
+        pred_arr = np.array([preds_dict.get(st, float("nan")) for st in example.test_states])
+        rmse = float(np.sqrt(np.nanmean((actual - pred_arr) ** 2)))
+
+        lines.append("## Predictions")
+        lines.append("")
+        lines.append("| State | Predicted | Actual | Error |")
+        lines.append("|-------|-----------|--------|-------|")
+        for st, a in zip(example.test_states, actual):
+            p = preds_dict.get(st, float("nan"))
+            lines.append(f"| {STATE_NAMES.get(st, st)} ({st}) | {p:.1f} | {a:.1f} | {p - a:+.1f} |")
+        lines.append("")
+        lines.append(f"**RMSE: {rmse:.2f}**")
+    except Exception as e:
+        lines.append(f"Failed to parse predictions: {e}")
+        lines.append(f"Raw: {getattr(result, 'predictions', 'MISSING')}")
+
+    transcript = "\n".join(lines)
+    print(f"\nDone in {elapsed:.1f}s | Score: {score:.4f}")
 
     out_path = OUTPUT_DIR / "smoke_test_rlm.md"
     out_path.write_text(transcript)
