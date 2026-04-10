@@ -30,7 +30,8 @@ PROFILES = {
         "teacher": "openai/gpt-5.4",
         "sub": "openai/gpt-5.4-mini",
         "api_key_env": "OPENAI_API_KEY",
-        "reasoning_effort": "xhigh",
+        "student_reasoning": "high",
+        "teacher_reasoning": "xhigh",
         "max_tokens": 65000,
     },
     "gemini": {
@@ -38,7 +39,8 @@ PROFILES = {
         "teacher": "gemini/gemini-3.1-pro-preview",
         "sub": "gemini/gemini-3-flash-preview",
         "api_key_env": "GEMINI_API_KEY",
-        "reasoning_effort": "high",
+        "student_reasoning": "high",
+        "teacher_reasoning": "high",
         "max_tokens": 65000,
     },
 }
@@ -156,13 +158,13 @@ def main():
     print(f"Built {len(examples)} cross-validation examples (51 states, 11 held out per split)")
 
     api_key = os.environ[profile["api_key_env"]]
-    lm_kwargs = {"api_key": api_key, "reasoning_effort": profile["reasoning_effort"], "cache": False}
+    base_kwargs = {"api_key": api_key, "cache": False}
     if profile["max_tokens"] is not None:
-        lm_kwargs["max_tokens"] = profile["max_tokens"]
+        base_kwargs["max_tokens"] = profile["max_tokens"]
 
-    student_lm = dspy.LM(profile["student"], **lm_kwargs)
-    teacher_lm = dspy.LM(profile["teacher"], **lm_kwargs)
-    sub_lm = dspy.LM(profile["sub"], **lm_kwargs)
+    student_lm = dspy.LM(profile["student"], reasoning_effort=profile["student_reasoning"], **base_kwargs)
+    teacher_lm = dspy.LM(profile["teacher"], reasoning_effort=profile["teacher_reasoning"], **base_kwargs)
+    sub_lm = dspy.LM(profile["sub"], reasoning_effort=profile["student_reasoning"], **base_kwargs)
 
     prompt_text = (PROJECT_DIR / "prompts" / "rlm.md").read_text()
     CrashPredictor = CrashPredictorBase.with_instructions(prompt_text)
@@ -195,7 +197,8 @@ def main():
         "student_model": profile["student"],
         "teacher_model": profile["teacher"],
         "sub_model": profile["sub"],
-        "reasoning_effort": profile["reasoning_effort"],
+        "student_reasoning": profile["student_reasoning"],
+        "teacher_reasoning": profile["teacher_reasoning"],
         "n_examples": len(examples),
         "initial_prompt_length": len(prompt_text),
         "resumed": resume_id is not None,
@@ -290,7 +293,7 @@ def main():
         "total_cost_usd": total_cost,
         "profile": profile_name,
         "gepa_auto": "light",
-        **{role: {"model": model, "reasoning": profile["reasoning_effort"], **stats[role]} for role, (model, _) in lm_roles.items()},
+        **{role: {"model": model, "reasoning": profile["teacher_reasoning"] if role == "teacher" else profile["student_reasoning"], **stats[role]} for role, (model, _) in lm_roles.items()},
     }
 
     manifest_path = run_dir / "manifest.json"

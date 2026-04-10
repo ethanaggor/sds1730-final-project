@@ -1,9 +1,20 @@
 import { readdir, readFile, stat } from "fs/promises";
+import { watch } from "fs";
 import { join } from "path";
 
 const RUNS_DIR = join(import.meta.dir, "traces", "runs");
 const PORT = 3456;
 const POLL_INTERVAL = 2000;
+
+const reloadClients = new Set<ReadableStreamDirectController>();
+const WATCH_FILES = ["index.html"];
+for (const file of WATCH_FILES) {
+  watch(join(import.meta.dir, file), () => {
+    for (const c of reloadClients) {
+      try { c.write(`data: reload\n\n`); } catch { reloadClients.delete(c); }
+    }
+  });
+}
 
 async function getRunDirs(): Promise<string[]> {
   try {
@@ -54,7 +65,8 @@ async function buildRunMeta(id: string) {
     student: start?.student_model ?? null,
     teacher: start?.teacher_model ?? null,
     sub: start?.sub_model ?? null,
-    reasoningEffort: start?.reasoning_effort ?? null,
+    studentReasoning: start?.student_reasoning ?? start?.reasoning_effort ?? null,
+    teacherReasoning: start?.teacher_reasoning ?? start?.reasoning_effort ?? null,
     evalCount: events.filter((e: any) => e.type === "eval").length,
     costUsd: costSource?.total_cost_usd ?? null,
   };
@@ -152,6 +164,19 @@ Bun.serve({
           "Cache-Control": "no-cache",
           Connection: "keep-alive",
         },
+      });
+    }
+
+    if (url.pathname === "/dev/reload") {
+      const stream = new ReadableStream({
+        type: "direct",
+        pull(controller: ReadableStreamDirectController) {
+          reloadClients.add(controller);
+          req.signal.addEventListener("abort", () => reloadClients.delete(controller));
+        },
+      } as any);
+      return new Response(stream, {
+        headers: { "Content-Type": "text/event-stream", "Cache-Control": "no-cache" },
       });
     }
 

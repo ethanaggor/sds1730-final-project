@@ -37,12 +37,12 @@ def main():
     example = examples[0]
 
     api_key = os.environ[profile["api_key_env"]]
-    lm_kwargs = {"api_key": api_key, "reasoning_effort": profile["reasoning_effort"], "cache": False}
+    base_kwargs = {"api_key": api_key, "cache": False}
     if profile["max_tokens"] is not None:
-        lm_kwargs["max_tokens"] = profile["max_tokens"]
+        base_kwargs["max_tokens"] = profile["max_tokens"]
 
-    student_lm = dspy.LM(profile["student"], **lm_kwargs)
-    sub_lm = dspy.LM(profile["sub"], **lm_kwargs)
+    student_lm = dspy.LM(profile["student"], reasoning_effort=profile["student_reasoning"], **base_kwargs)
+    sub_lm = dspy.LM(profile["sub"], reasoning_effort=profile["student_reasoning"], **base_kwargs)
     dspy.configure(lm=student_lm)
 
     prompt_text = PROMPT_PATH.read_text()
@@ -58,7 +58,7 @@ def main():
     )
 
     print(f"Running RLM on split 0 ({len(example.test_states)} held-out states)...")
-    print(f"Profile: {profile_name} | Student: {profile['student']} ({profile['reasoning_effort']})")
+    print(f"Profile: {profile_name} | Student: {profile['student']} ({profile['student_reasoning']})")
     t0 = time.time()
 
     result = predictor(train_df=example.train_df, test_df=example.test_df)
@@ -72,7 +72,7 @@ def main():
     sub = _lm_stats(sub_lm)
 
     lines = [
-        f"# Smoke Test: {profile['student']} ({profile['reasoning_effort']}) -- RLM",
+        f"# Smoke Test: {profile['student']} ({profile['student_reasoning']}) -- RLM",
         f"**Profile**: {profile_name}",
         f"**Time**: {elapsed:.1f}s",
         f"**Score**: {score:.4f}",

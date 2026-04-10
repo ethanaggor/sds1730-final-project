@@ -95,6 +95,22 @@
   }
   .candidate-meta { font-size: 10px; color: var(--text-muted); margin-top: 4px; font-family: var(--mono); }
 
+  .proposal {
+    padding: 10px 12px; margin-bottom: 4px; border-radius: var(--radius-sm);
+    border: 1px solid rgba(255,200,50,0.15); cursor: pointer; transition: all 0.15s ease;
+    opacity: 0.7;
+  }
+  .proposal:hover { background: rgba(255,255,255,0.03); border-color: rgba(255,200,50,0.3); }
+  .proposal.selected { background: rgba(255,200,50,0.08); border-color: rgba(255,200,50,0.4); opacity: 1; }
+  .proposal-badge {
+    font-family: var(--mono); font-size: 10px; padding: 2px 6px;
+    border-radius: 100px; background: rgba(255,200,50,0.12); color: rgb(255,200,50);
+  }
+  .proposals-divider {
+    font-size: 10px; color: var(--text-muted); text-transform: uppercase;
+    letter-spacing: 0.06em; padding: 8px 12px 4px; font-family: var(--mono);
+  }
+
   .center-empty {
     display: flex; align-items: center; justify-content: center; height: 100%;
     color: var(--text-muted); font-size: 13px;
@@ -279,6 +295,7 @@
   .event-type.optimization_start { background: var(--yellow-dim); color: var(--yellow); }
   .event-type.optimization_complete { background: var(--green-dim); color: var(--green); }
   .event-type.phase { background: rgba(255,255,255,0.06); color: var(--text-secondary); }
+  .event-type.proposed_instruction { background: rgba(255,200,50,0.12); color: rgb(255,200,50); }
   .event-body { color: var(--text-secondary); margin-top: 4px; font-family: var(--mono); font-size: 11px; }
   .event-body.baseline { color: #7a8baa; }
   .event-body.mutation { color: #c9a04e; }
@@ -346,7 +363,7 @@
 <script>
 const S = {
   events: [], manifest: null, candidates: [],
-  selectedCandidate: null, selectedEval: null,
+  selectedCandidate: null, selectedEval: null, selectedProposal: null,
   runs: [], currentRun: null, userSelectedRun: false,
   elapsedTimer: null, stalenessTimer: null, lastEventTs: 0,
 };
@@ -437,10 +454,11 @@ function updateHeader() {
   }
 
   if (start) {
-    const re = start.reasoning_effort ?? start.student_reasoning ?? null;
-    document.getElementById("student-model").textContent = shortModel(start.student_model) + (re ? ` (${re})` : "");
-    document.getElementById("teacher-model").textContent = shortModel(start.teacher_model) + (re ? ` (${re})` : "");
-    document.getElementById("sub-model").textContent = shortModel(start.sub_model) + (re ? ` (${re})` : "");
+    const sr = start.student_reasoning ?? start.reasoning_effort ?? null;
+    const tr = start.teacher_reasoning ?? start.reasoning_effort ?? null;
+    document.getElementById("student-model").textContent = shortModel(start.student_model) + (sr ? ` (${sr})` : "");
+    document.getElementById("teacher-model").textContent = shortModel(start.teacher_model) + (tr ? ` (${tr})` : "");
+    document.getElementById("sub-model").textContent = shortModel(start.sub_model) + (sr ? ` (${sr})` : "");
   }
 
   // Cost and I/O: prefer manifest, then completion event, then latest stats event
@@ -475,29 +493,78 @@ function renderRunSelect() {
 
 function renderCandidates() {
   const cands = S.events.filter(e => e.type === "candidate").sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
+  const proposals = S.events.filter(e => e.type === "proposed_instruction");
   S.candidates = cands;
   const container = document.getElementById("candidates-list");
-  if (!cands.length) return;
+  if (!cands.length && !proposals.length) return;
 
-  const bestScore = cands[0]?.score;
-  container.innerHTML = cands.map((c, i) => {
-    const isBest = c.score === bestScore;
-    const sel = S.selectedCandidate === c.idx ? "selected" : "";
-    const best = isBest ? "best" : "";
-    return `<div class="candidate ${sel} ${best}" data-idx="${c.idx}" onclick="selectCandidate(${c.idx})">
-      <div class="candidate-row">
-        <span class="candidate-idx">${isBest ? "&#9733; " : ""}#${c.idx}</span>
-        <span class="candidate-score">${fmt(c.score, 4)}</span>
-      </div>
-      <div class="candidate-preview">${escHtml((c.instruction || "").slice(0, 120))}</div>
-      <div class="candidate-meta">${c.parents ? "from #" + c.parents.join(", #") : "seed"} &middot; ${c.eval_count_at_discovery ?? "?"} evals</div>
-    </div>`;
-  }).join("");
+  let html = "";
+
+  if (proposals.length) {
+    const scoredIters = new Set(cands.map(c => c.idx));
+    const pending = proposals.filter(p => !scoredIters.has(p.iteration));
+    if (pending.length) {
+      html += `<div class="proposals-divider">Proposed (pending eval)</div>`;
+      html += pending.map(p => {
+        const key = `proposal-${p.iteration}`;
+        const sel = S.selectedProposal === key ? "selected" : "";
+        return `<div class="proposal ${sel}" onclick="selectProposal('${key}')">
+          <div class="candidate-row">
+            <span class="candidate-idx">iter ${p.iteration}</span>
+            <span class="proposal-badge">proposed</span>
+          </div>
+          <div class="candidate-preview">${escHtml((p.instruction || "").slice(0, 120))}</div>
+        </div>`;
+      }).join("");
+    }
+  }
+
+  if (cands.length) {
+    if (proposals.length) html += `<div class="proposals-divider">Scored</div>`;
+    const bestScore = cands[0]?.score;
+    html += cands.map((c, i) => {
+      const isBest = c.score === bestScore;
+      const sel = S.selectedCandidate === c.idx ? "selected" : "";
+      const best = isBest ? "best" : "";
+      return `<div class="candidate ${sel} ${best}" data-idx="${c.idx}" onclick="selectCandidate(${c.idx})">
+        <div class="candidate-row">
+          <span class="candidate-idx">${isBest ? "&#9733; " : ""}#${c.idx}</span>
+          <span class="candidate-score">${fmt(c.score, 4)}</span>
+        </div>
+        <div class="candidate-preview">${escHtml((c.instruction || "").slice(0, 120))}</div>
+        <div class="candidate-meta">${c.parents ? "from #" + c.parents.join(", #") : "seed"} &middot; ${c.eval_count_at_discovery ?? "?"} evals</div>
+      </div>`;
+    }).join("");
+  }
+
+  container.innerHTML = html;
+}
+
+function selectProposal(key) {
+  S.selectedProposal = key;
+  S.selectedCandidate = null;
+  S.selectedEval = null;
+  renderCandidates();
+  renderEventLog();
+
+  const iter = parseInt(key.split("-")[1]);
+  const proposal = S.events.find(e => e.type === "proposed_instruction" && e.iteration === iter);
+  if (!proposal) return;
+
+  const container = document.getElementById("detail-content");
+  container.innerHTML = `
+    <div class="detail-header">
+      <div class="detail-title">Proposed Mutation (iter ${iter})</div>
+      <div class="detail-meta"><span class="proposal-badge">pending eval</span></div>
+    </div>
+    <div class="instruction-block">${escHtml(proposal.instruction || "(empty)")}</div>
+  `;
 }
 
 function selectCandidate(idx) {
   S.selectedCandidate = idx;
   S.selectedEval = null;
+  S.selectedProposal = null;
   renderCandidates();
   renderEventLog();
 
@@ -519,6 +586,7 @@ function selectCandidate(idx) {
 
 function selectEval(eventIdx) {
   S.selectedEval = eventIdx;
+  S.selectedProposal = null;
   S.selectedCandidate = null;
   renderCandidates();
   renderEventLog();
@@ -703,6 +771,9 @@ function renderEventLog() {
       body = parts.join(" &middot; ");
     } else if (ev.type === "optimization_start") {
       body = `${ev.n_examples} examples`;
+    } else if (ev.type === "proposed_instruction") {
+      body = `iter ${ev.iteration}: ${escHtml((ev.instruction || "").slice(0, 80))}...`;
+      clickAttr = `onclick="selectProposal('proposal-${ev.iteration}')"`;
     }
 
     const badgeLabel = badgeClass === "eval-baseline" ? "baseline"
@@ -872,5 +943,6 @@ async function init() {
 
 init();
 </script>
+<script>new EventSource("/dev/reload").onmessage = () => location.reload();</script>
 </body>
 </html>
