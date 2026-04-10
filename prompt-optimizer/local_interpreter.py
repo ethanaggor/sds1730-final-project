@@ -21,10 +21,105 @@ BANNED_PATTERNS = [
 ]
 
 _LOOP_THRESHOLD = 3
-_LOOP_WARNING = (
-    "\nWARNING: You have produced identical output 3 times in a row. "
-    "Try a different analytical approach or call SUBMIT with your current best predictions."
-)
+
+_PREDICTION_KEY_ALIASES = {
+    "pred_crash_pct": "predicted_crash_pct",
+    "crash_pct": "predicted_crash_pct",
+    "prediction": "predicted_crash_pct",
+    "predicted": "predicted_crash_pct",
+    "pct": "predicted_crash_pct",
+    "pred": "predicted_crash_pct",
+}
+
+_FLOAT_RE = re.compile(r"-?\d+\.\d+")
+
+
+def _coerce_predictions(value):
+    """Coerce common prediction formats to list[dict] for Pydantic validation."""
+    if isinstance(value, pd.DataFrame):
+        value = value.to_dict("records")
+
+    if isinstance(value, dict) and all(isinstance(v, (int, float)) for v in value.values()):
+        value = [{"state": k, "predicted_crash_pct": float(v)} for k, v in value.items()]
+
+    if isinstance(value, list) and value and hasattr(value[0], "__dict__") and not isinstance(value[0], dict):
+        value = [
+            {k: v for k, v in (item.model_dump() if hasattr(item, "model_dump") else item.__dict__).items()}
+            for item in value
+        ]
+
+    if isinstance(value, list):
+        normalized = []
+        for item in value:
+            if isinstance(item, dict):
+                row = {}
+                for k, v in item.items():
+                    canonical = _PREDICTION_KEY_ALIASES.get(k, k)
+                    row[canonical] = v
+                if "predicted_crash_pct" in row:
+                    try:
+                        row["predicted_crash_pct"] = float(row["predicted_crash_pct"])
+                    except (ValueError, TypeError):
+                        pass
+                normalized.append(row)
+            else:
+                normalized.append(item)
+        value = normalized
+
+    return value
+
+
+def _extract_float_fingerprint(text: str) -> tuple[float, ...] | None:
+    """Extract sorted rounded floats from text as a hashable fingerprint."""
+    matches = _FLOAT_RE.findall(text)
+    if len(matches) < 3:
+        return None
+    return tuple(sorted(round(float(m), 1) for m in matches))
+
+
+def _build_submit_hint(ns: dict) -> str | None:
+    """Scan interpreter namespace for prediction data and build SUBMIT call."""
+    for var_name, val in ns.items():
+        if var_name.startswith("_") or var_name in ("np", "pd", "print", "SUBMIT", "__builtins__"):
+            continue
+
+        records = None
+
+        if isinstance(val, pd.DataFrame) and len(val) >= 5:
+            cols = set(val.columns)
+            state_col = next((c for c in cols if c.lower() == "state"), None)
+            pred_col = next((c for c in cols if "crash" in c.lower() or "pred" in c.lower()), None)
+            if state_col and pred_col:
+                records = [
+                    {"state": str(row[state_col]), "predicted_crash_pct": float(row[pred_col])}
+                    for _, row in val.iterrows()
+                ]
+
+        if records is None and isinstance(val, dict) and len(val) >= 5:
+            if all(isinstance(k, str) and len(k) == 2 and isinstance(v, (int, float)) for k, v in val.items()):
+                records = [{"state": k, "predicted_crash_pct": float(v)} for k, v in val.items()]
+
+        if records is None and isinstance(val, list) and len(val) >= 5 and isinstance(val[0], dict):
+            if "state" in val[0]:
+                pred_key = next((k for k in val[0] if "crash" in k.lower() or "pred" in k.lower()), None)
+                if pred_key:
+                    records = [
+                        {"state": str(r["state"]), "predicted_crash_pct": float(r[pred_key])}
+                        for r in val
+                    ]
+
+        if records and len(records) >= 5:
+            entries = ", ".join(
+                f'{{"state": "{r["state"]}", "predicted_crash_pct": {r["predicted_crash_pct"]:.4f}}}'
+                for r in records
+            )
+            return (
+                f"\n\nYou have been repeating the same predictions. "
+                f"Your data is ready. Run this code exactly:\n\n"
+                f"SUBMIT(predictions=[{entries}])"
+            )
+
+    return None
 
 
 class _SubmitSignal(Exception):
@@ -50,10 +145,10 @@ class LocalInterpreter:
         self._tls.ns = value
 
     @property
-    def _recent_outputs(self) -> list[str]:
-        if not hasattr(self._tls, "recent_outputs"):
-            self._tls.recent_outputs = []
-        return self._tls.recent_outputs
+    def _float_fingerprints(self) -> list[tuple[float, ...] | None]:
+        if not hasattr(self._tls, "float_fingerprints"):
+            self._tls.float_fingerprints = []
+        return self._tls.float_fingerprints
 
     def __deepcopy__(self, memo):
         return LocalInterpreter()
@@ -82,31 +177,40 @@ class LocalInterpreter:
             exec(code, ns)
             output = buf.getvalue()
         except _SubmitSignal as s:
-            return FinalOutput(s.fields)
+            fields = s.fields
+            if "predictions" in fields:
+                fields["predictions"] = _coerce_predictions(fields["predictions"])
+            return FinalOutput(fields)
         except SyntaxError:
             raise
         except Exception as e:
             raise CodeInterpreterError(str(e)) from e
 
-        history = self._recent_outputs
-        history.append(output)
+        fp = _extract_float_fingerprint(output)
+        history = self._float_fingerprints
+        history.append(fp)
         if len(history) > _LOOP_THRESHOLD:
             history.pop(0)
-        if len(history) >= _LOOP_THRESHOLD and len(set(history)) == 1:
-            output += _LOOP_WARNING
+        if (
+            fp is not None
+            and len(history) >= _LOOP_THRESHOLD
+            and all(h == fp for h in history)
+        ):
+            hint = _build_submit_hint(ns)
+            if hint:
+                output += hint
 
         return output
 
     def shutdown(self):
         self.namespace = dict(self._base)
-        self._tls.recent_outputs = []
+        self._tls.float_fingerprints = []
         self.tools.clear()
 
 
 def _make_submit(output_fields=None):
     if output_fields:
         names = [f["name"] for f in output_fields]
-        # Build positional-arg SUBMIT matching DSPy's default convention
         code = f"def SUBMIT({', '.join(names)}):\n    raise _SubmitSignal({{{', '.join(f'\"{n}\": {n}' for n in names)}}})"
         ns = {"_SubmitSignal": _SubmitSignal}
         exec(code, ns)

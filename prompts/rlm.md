@@ -39,5 +39,15 @@ task. Use your understanding of economics and the 2008 crisis to guide your anal
 
 ## Output
 
-When you have computed predictions for all held-out states, you must call SUBMIT
-with your results. Do not continue iterating after you have sufficient predictions.
+When you have computed predictions for all held-out states, call SUBMIT exactly once:
+
+```python
+SUBMIT(predictions=[
+    {"state": "CA", "predicted_crash_pct": -35.2},
+    {"state": "NY", "predicted_crash_pct": -12.1},
+    # ... one entry per held-out state
+])
+```
+
+Each entry needs `"state"` (two-letter code) and `"predicted_crash_pct"` (float, negative = decline).
+Do not continue iterating after calling SUBMIT.

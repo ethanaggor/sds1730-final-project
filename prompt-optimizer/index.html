@@ -362,7 +362,7 @@
 
 <script>
 const S = {
-  events: [], manifest: null, candidates: [],
+  events: [], _nextIdx: 0, manifest: null, candidates: [],
   selectedCandidate: null, selectedEval: null, selectedProposal: null,
   runs: [], currentRun: null, userSelectedRun: false,
   elapsedTimer: null, stalenessTimer: null, lastEventTs: 0,
@@ -382,7 +382,7 @@ marked.setOptions({ breaks: true, gfm: true });
 function fmt(n, d = 2) { return n != null ? Number(n).toFixed(d) : "--"; }
 function fmtK(n) { return n != null ? n >= 1000 ? (n / 1000).toFixed(1) + "k" : String(n) : "--"; }
 function shortModel(m) { return m ? m.replace("gemini/gemini-", "").replace("openai/", "").replace("-preview", "") : "--"; }
-function escHtml(s) { const d = document.createElement("div"); d.textContent = s; return d.innerHTML; }
+function escHtml(s) { return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
 
 function fmtElapsed(seconds) {
   if (seconds < 60) return Math.floor(seconds) + "s";
@@ -591,7 +591,7 @@ function selectEval(eventIdx) {
   renderCandidates();
   renderEventLog();
 
-  const ev = S.events[eventIdx];
+  const ev = S.events.find(e => e._idx === eventIdx);
   if (!ev || !ev.trajectory) return;
 
   const container = document.getElementById("detail-content");
@@ -644,10 +644,9 @@ function buildEvalIndex() {
   const iterationOf = new Map();
   for (const ev of evals) {
     if (baselineSet.has(ev)) continue;
-    const evIdx = S.events.indexOf(ev);
     let iterIdx = 0;
     for (const it of iterEvents) {
-      if (S.events.indexOf(it) < evIdx) iterIdx = it.idx;
+      if (it._idx < ev._idx) iterIdx = it.idx;
     }
     iterationOf.set(ev, iterIdx);
   }
@@ -719,7 +718,7 @@ function renderEventLog() {
       const cls = ev.phase === "baseline" ? "baseline" : "optimizing";
       const label = ev.phase === "baseline"
         ? `Phase 1: Baseline Evaluation (${ev.n_splits ?? "?"} splits)`
-        : "Phase 2: Optimization (constrained teacher)";
+        : "Phase 2: Optimization";
       rows.push(`<div class="phase-banner ${cls}">${label}</div>`);
       lastPhase = null;
       lastIter = null;
@@ -750,7 +749,7 @@ function renderEventLog() {
       }
     }
 
-    const origIdx = S.events.indexOf(ev);
+    const origIdx = ev._idx;
     const time = ev.ts ? new Date(ev.ts).toLocaleTimeString() : "";
     const sel = S.selectedEval === origIdx ? "selected" : "";
     let body = "";
@@ -826,7 +825,7 @@ function renderChart() {
     .call(g => g.selectAll(".tick line").remove())
     .call(g => g.selectAll(".tick text").attr("fill", "#666").style("font-family", "var(--mono)").style("font-size", "10px"));
 
-  const gradientId = "area-grad";
+  const gradientId = "area-grad-" + Date.now();
   const defs = svg.append("defs");
   const gradient = defs.append("linearGradient").attr("id", gradientId).attr("x1", 0).attr("x2", 0).attr("y1", 0).attr("y2", 1);
   gradient.append("stop").attr("offset", "0%").attr("stop-color", "var(--accent)").attr("stop-opacity", 0.15);
@@ -875,7 +874,10 @@ async function fetchRunData(runId) {
       fetch(`/api/events?run=${runId}`).then(r => r.json()),
       fetch(`/api/manifest?run=${runId}`).then(r => r.ok ? r.json() : null),
     ]);
-    S.events = events;
+    events.forEach((e, i) => e._idx = i);
+    S._nextIdx = events.length;
+    const lastStats = events.findLast(e => e.type === "stats");
+    S.events = events.filter(e => e.type !== "stats" || e === lastStats);
     S.manifest = manifest;
     S.selectedCandidate = null;
     S.selectedEval = null;
@@ -914,6 +916,8 @@ function connectSSE() {
           && !S.runs.some(r => r.id === evRun);
         if (isNewRun) {
           S.currentRun = evRun;
+          ev._idx = 0;
+          S._nextIdx = 1;
           S.events = [ev];
           S.manifest = null;
           S.selectedCandidate = null;
@@ -924,6 +928,10 @@ function connectSSE() {
           return;
         }
         if (evRun === S.currentRun) {
+          ev._idx = S._nextIdx++;
+          if (ev.type === "stats") {
+            S.events = S.events.filter(e => e.type !== "stats");
+          }
           S.events.push(ev);
           if (ev.type === "stats") { updateHeader(); }
           else { render(); }
