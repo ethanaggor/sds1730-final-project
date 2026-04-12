@@ -10,13 +10,23 @@ State-level regression analysis of the 2008 housing crisis. We use FRED economic
 
 ### Python
 
-Requires Python 3.12+. Install dependencies with uv into the course-level venv:
+Requires Python 3.12+ and [uv](https://docs.astral.sh/uv/).
 
 ```bash
 cd sds-1730
 uv venv .venv --python 3.12
 uv pip install -r final-project/pyproject.toml
 ```
+
+### Jupyter kernel
+
+Register the venv as a Jupyter kernel so notebooks use the correct Python:
+
+```bash
+uv run --project final-project python -m ipykernel install --user --name python3 --display-name "Python 3 (sds1730)"
+```
+
+This overwrites the default `python3` kernel to point at the project venv. After running this, restart any running Jupyter server or kernel.
 
 ### Environment
 

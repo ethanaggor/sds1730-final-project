@@ -446,8 +446,17 @@ function updateHeader() {
     stopElapsedTimer();
     document.getElementById("elapsed").textContent = fmtElapsed(end.elapsed_seconds);
   } else if (start) {
-    el.className = "badge badge-running"; el.textContent = "Running";
-    startElapsedTimer();
+    const lastTs = S.events.filter(e => e.ts).map(e => new Date(e.ts).getTime()).at(-1);
+    const stale = lastTs && (Date.now() - lastTs > 60_000);
+    if (stale) {
+      el.className = "badge badge-idle"; el.textContent = "Paused";
+      stopElapsedTimer();
+      const elapsedSec = (lastTs - new Date(start.ts).getTime()) / 1000;
+      document.getElementById("elapsed").textContent = fmtElapsed(elapsedSec);
+    } else {
+      el.className = "badge badge-running"; el.textContent = "Running";
+      startElapsedTimer();
+    }
   } else {
     el.className = "badge badge-idle"; el.textContent = "Idle";
     stopElapsedTimer();

@@ -1,0 +1,82 @@
+[
+  {
+    "split": 0,
+    "rmse_llm_zero": 2.4814802051874585
+  },
+  {
+    "split": 1,
+    "rmse_llm_zero": 3.6577805210369747
+  },
+  {
+    "split": 2,
+    "rmse_llm_zero": 2.7593229234793237
+  },
+  {
+    "split": 3,
+    "rmse_llm_zero": 2.1513750524285937
+  },
+  {
+    "split": 4,
+    "rmse_llm_zero": 3.3798303171992172
+  },
+  {
+    "split": 5,
+    "rmse_llm_zero": 1.356906786876544
+  },
+  {
+    "split": 6,
+    "rmse_llm_zero": 3.826127873250639
+  },
+  {
+    "split": 7,
+    "rmse_llm_zero": 1.9015761437030803
+  },
+  {
+    "split": 8,
+    "rmse_llm_zero": 2.9498905834448585
+  },
+  {
+    "split": 9,
+    "rmse_llm_zero": 3.0811914930719384
+  },
+  {
+    "split": 10,
+    "rmse_llm_zero": 1.8089699123796787
+  },
+  {
+    "split": 11,
+    "rmse_llm_zero": 3.107997531095501
+  },
+  {
+    "split": 12,
+    "rmse_llm_zero": 1.9427280016776514
+  },
+  {
+    "split": 13,
+    "rmse_llm_zero": 2.8088945396070115
+  },
+  {
+    "split": 14,
+    "rmse_llm_zero": 1.3976169043895987
+  },
+  {
+    "split": 15,
+    "rmse_llm_zero": 3.352171699339474
+  },
+  {
+    "split": 16,
+    "rmse_llm_zero": 2.1281574698216126
+  },
+  {
+    "split": 17,
+    "rmse_llm_zero": 2.8401110323500913
+  },
+  {
+    "split": 18,
+    "rmse_llm_zero": 2.496464028616908
+  },
+  {
+    "split": 19,
+    "rmse_llm_zero": 2.091181961178327
+  }
+]
